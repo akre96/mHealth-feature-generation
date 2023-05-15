@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "mhealth-feature-generation"
+version = "0.1.0"
+description = ""
+authors = ["Samir Akre <sakre@g.ucla.edu>"]
+readme = "README.md"
+packages = [{include = "mhealth_feature_generation"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+jupyter = "^1.0.0"
+pandas = "^2.0.1"
+matplotlib = "^3.7.1"
+seaborn = "^0.12.2"
+altair = "^5.0.0"
+numpy = "^1.24.3"
+black = "^23.3.0"
+tqdm = "^4.65.0"
+autopep8 = "^2.0.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -5,6 +5,7 @@ Time can be "day" or in quarter days with values "h0", "h6", "h12", "h18". Time 
 
 """
 import pandas as pd
+import numpy as np
 from typing import List
 
 
@@ -41,6 +42,30 @@ def getWatchOnHours(data: pd.DataFrame) -> pd.DataFrame:
     )
     watch_hr_logs["date"] = watch_hr_logs["date"].dt.date
     return watch_hr_logs
+
+def qcWatchData(data: pd.DataFrame, threshold: int = 18) -> pd.DataFrame:
+    """ Set metrics from watch to NaN if watch was worn for less than threshold hours
+    """
+    if "watchOnHours_sum_day" not in data.columns:
+        data["watchOnHours_sum_day"] = getWatchOnHours(data)["watchOnHours_sum_day"]
+    watch_domains = [
+        "hr",
+        "rr",
+        "hrv",
+        "spo2",
+        "sleep",
+    ]
+    watch_features = [
+        c for c in data.columns if c.split('_')[0] in watch_domains
+    ]
+    print('watch_features', watch_features)
+
+    # Set days with less than 18 hours of watch wear to NaN
+    data.loc[
+        data.watchOnHours_sum_day < threshold,
+        watch_features
+    ] = np.nan
+    return data
 
 
 def aggregateVitals(
@@ -82,7 +107,9 @@ def aggregateVitals(
         .resample("1D", on="local_start", origin="start_day")
         .aggregate({"count": "sum", "median": aggregations})
     )
-    vital_daily.columns = [f"{vital_type}_" + c[1] + '_day' for c in vital_daily.columns]
+    vital_daily.columns = [
+        f"{vital_type}_" + c[1] + "_day" for c in vital_daily.columns
+    ]
     vital_daily = vital_daily.reset_index()
     vital_daily = vital_daily.rename(
         columns={f"{vital_type}_sum_day": f"{vital_type}_count_day"}
@@ -168,3 +195,70 @@ def processSleep(hk_data: pd.DataFrame) -> pd.DataFrame:
         sleep_data.append(sleep_piv)
 
     return pd.concat(sleep_data)
+
+
+def processActiveDuration(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFrame:
+    active_data = []
+    supported_types = ["StepCount", "ExerciseTime", "ActiveEnergyBurned"]
+    if hk_type not in supported_types:
+        raise ValueError(
+            f"Invalid hk_type: {hk_type}, must be one of {supported_types}"
+        )
+    qc_ranges = {
+        "ActiveEnergyBurned": {
+            "ratePerSecond": [0, 5],
+        },
+    }
+    for uid, data in hk_data.groupby("user_id"):
+        activity = (
+            data.loc[
+                data.type == hk_type,
+                ["local_start", "local_end", "value"],
+            ]
+            .rename(columns={"value": hk_type})
+            .sort_values(by="local_start")
+        )
+        activity["duration"] = activity["local_end"] - activity["local_start"]
+        try:
+            activity["ratePerSecond"] = activity[hk_type] / activity["duration"].dt.total_seconds()
+        except ZeroDivisionError:
+            nonzero_act = activity.duration.dt.total_seconds() != 0
+            activity["ratePerSecond"] = np.nan
+            activity.loc[
+                nonzero_act,
+                "ratePerSecond"
+            ] = activity.loc[nonzero_act, hk_type] / activity.loc[nonzero_act, "duration"].dt.total_seconds()
+        activity["prev_local_end"] = activity["local_end"].shift()
+        activity["prev_local_start"] = activity["local_start"].shift()
+        activity["overlap"] = (activity["local_start"] < activity["prev_local_end"]) & (
+            activity["local_end"] > activity["prev_local_start"]
+        )
+
+        for metric, range in qc_ranges[hk_type].items():
+            activity = activity[
+                activity[metric].between(range[0], range[1], inclusive="both")
+            ]
+
+        # Remove overlapping rows
+        # TODO: Review how overlaps are being handled
+        if activity["overlap"].any():
+            activity = activity[~activity["overlap"]]
+            activity.drop(
+                columns=["prev_local_end", "prev_local_start", "overlap"],
+                inplace=True,
+            )
+
+        activity_agg = pd.DataFrame(
+            activity.set_index("local_start")[hk_type]
+            .resample("1D", origin="start_day")
+            .aggregate(["sum", "count"])
+        )
+        activity_agg.columns = [f"{hk_type}_{col}_day" for col in activity_agg.columns]
+        activity_agg[f"{hk_type}_duration_day"] = pd.to_timedelta(
+            activity["duration"].sum()
+        ) / pd.Timedelta("1h")
+        activity_agg["user_id"] = uid
+        activity_agg["date"] = activity_agg.index.date
+
+        active_data.append(activity_agg.reset_index(drop=True))
+    return pd.concat(active_data)

@@ -9,7 +9,7 @@ packages = [{include = "mhealth_feature_generation"}]
 [tool.poetry.dependencies]
 python = "^3.11"
 jupyter = "^1.0.0"
-pandas = "^2.0.1"
+pandas = "^1.5.1"
 matplotlib = "^3.7.1"
 seaborn = "^0.12.2"
 altair = "^5.0.0"

@@ -58,9 +58,8 @@ class DataLoader:
             data["type"] = data["type"].str.replace("Sdnn", "SDNN")
 
             sleep_vals = data["type"].str.contains("Sleep")
-            data.loc[sleep_vals, "value"] = (
-                data.loc[sleep_vals, "value"]
-                .apply(self.snakeToCamelCase)
+            data.loc[sleep_vals, "value"] = data.loc[sleep_vals, "value"].apply(
+                self.snakeToCamelCase
             )
 
         data = data.rename(columns={"HKTimezone": "timezone"})
@@ -111,7 +110,9 @@ class DataLoader:
         if not path.suffix == ".csv":
             raise ValueError(f"File is not a CSV: {path}")
 
-        data = pd.read_csv(path, parse_dates=["local_start", "local_end"], low_memory=False)
+        data = pd.read_csv(
+            path, parse_dates=["local_start", "local_end"], low_memory=False
+        )
         return data
 
     @staticmethod

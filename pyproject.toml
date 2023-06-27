@@ -19,6 +19,9 @@ tqdm = "^4.65.0"
 autopep8 = "^2.0.2"
 
 
+[tool.poetry.group.dev.dependencies]
+mhealth-anomaly-detection = {path = "/Users/sakre/Code/dgc/mhealth_anomaly_detection"}
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

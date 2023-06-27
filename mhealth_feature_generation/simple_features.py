@@ -208,6 +208,8 @@ def processActiveDuration(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFrame:
         "ActiveEnergyBurned": {
             "ratePerSecond": [0, 5],
         },
+        "ExerciseTime": {},
+        "StepCount": {},
     }
     for uid, data in hk_data.groupby("user_id"):
         activity = (
@@ -218,6 +220,7 @@ def processActiveDuration(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFrame:
             .rename(columns={"value": hk_type})
             .sort_values(by="local_start")
         )
+        activity[hk_type] = activity[hk_type].astype(float)
         activity["duration"] = activity["local_end"] - activity["local_start"]
         try:
             activity["ratePerSecond"] = activity[hk_type] / activity["duration"].dt.total_seconds()
@@ -262,3 +265,57 @@ def processActiveDuration(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFrame:
 
         active_data.append(activity_agg.reset_index(drop=True))
     return pd.concat(active_data)
+
+def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
+    """Process sleep time interval data from Apple HealthKit
+
+    Aggregation of duration reported in HOURS
+    Args:
+        hk_data (pd.DataFrame): HealthKit data
+
+    Returns:
+        pd.DataFrame: Statistics on sleep time intervals
+    """
+    sleep_data = []
+    for uid, data in hk_data.groupby("user_id"):
+        sleep = data.loc[
+            data.type == "SleepAnalysis",
+            ["local_start", "local_end", "value"],
+        ].sort_values(by="local_start")
+        sleep["value"] = sleep["value"].str.replace("HKCategoryValueSleepAnalysis", "")
+
+        sleep["duration"] = sleep["local_end"] - sleep["local_start"]
+        sleep = sleep.drop_duplicates()
+        # Start at noon
+        noon = pd.to_datetime(sleep["local_start"].min()).replace(hour=12, minute=0, second=0, microsecond=0) 
+        sleep.drop_duplicates()
+        bedrestOnset = sleep[sleep.value.isin(['InBed', 'Asleep'])]\
+            .resample('1D', origin=noon, on='local_start')['local_start'].first().rename('bedrestOnset')
+        bedrestOffset = sleep[sleep.value.isin(['InBed', 'Asleep'])]\
+            .resample('1D', origin=noon, on='local_start')['local_end'].last().rename('bedrestOffset')
+        sleepOnset = sleep[sleep.value.isin(['Asleep'])]\
+            .resample('1D', origin=noon, on='local_start')['local_start'].first().rename('sleepOnset')
+        sleepOffset= sleep[sleep.value.isin(['Asleep'])]\
+            .resample('1D', origin=noon, on='local_start')['local_end'].last().rename('sleepOffset')
+
+        sleep_agg = pd.concat([bedrestOnset, bedrestOffset, sleepOnset, sleepOffset], axis=1)
+        sleep_agg['bedrestDuration'] = (sleep_agg['bedrestOffset'] - sleep_agg['bedrestOnset']).to_numpy() / pd.Timedelta('1 hour')
+        sleep_agg['sleepDuration'] = (sleep_agg['sleepOffset'] - sleep_agg['sleepOnset']).to_numpy() / pd.Timedelta('1 hour')
+        sleep_agg['sleepEfficiency'] = sleep_agg['sleepDuration'] / sleep_agg['bedrestDuration']
+        sleep_agg.loc[sleep_agg['sleepEfficiency'] > 1, 'sleepEfficiency'] = 1
+        sleep_agg['sleepOnsetLatency'] = (sleep_agg['sleepOnset'] - sleep_agg['bedrestOnset']).to_numpy() / pd.Timedelta('1 hour')
+
+        sleep_agg['bedrestOnsetHours'] = (sleep_agg['bedrestOnset'] - sleep_agg.index).to_numpy() / pd.Timedelta('1 hour')
+        sleep_agg['bedrestOffsetHours'] = (sleep_agg['bedrestOffset'] - sleep_agg.index).to_numpy() / pd.Timedelta('1 hour')
+        sleep_agg['sleepOnsetHours'] = (sleep_agg['sleepOnset'] - sleep_agg.index).to_numpy() / pd.Timedelta('1 hour')
+        sleep_agg['sleepOffsetHours'] = (sleep_agg['sleepOffset'] - sleep_agg.index).to_numpy() / pd.Timedelta('1 hour')
+
+        sleep_agg = sleep_agg.drop(columns=['bedrestOnset', 'bedrestOffset', 'sleepOnset', 'sleepOffset'])
+
+        sleep_agg = sleep_agg.reset_index()
+        sleep_agg["date"] = sleep_agg["local_start"].dt.date
+        sleep_agg = sleep_agg.drop(columns=["local_start"])
+        sleep_agg["user_id"] = uid
+        sleep_data.append(sleep_agg)
+
+    return pd.concat(sleep_data)

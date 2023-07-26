@@ -15,6 +15,7 @@ tqdm = "^4.65.0"
 shap = "^0.42.1"
 llvmlite = "^0.40.1"
 numba = "^0.57.1"
+pingouin = "^0.5.3"
 
 
 [tool.poetry.group.dev.dependencies]

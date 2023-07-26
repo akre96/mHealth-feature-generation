@@ -16,7 +16,6 @@ except ModuleNotFoundError:
 durationType = pd.Timedelta | Literal["today", "yesterday"] | str
 
 
-# TODO: Allow variable binning of features during duration
 def collectFeatures(
     hk_data: pd.DataFrame,
     user_id: int,

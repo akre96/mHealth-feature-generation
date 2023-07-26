@@ -14,8 +14,6 @@ def getWatchOnHours(data: pd.DataFrame) -> pd.DataFrame:
     Assumes if there is a heart rate log, the watch was worn
     Returned dataframe has columns [user_id, date, watchOnHours_sum_day]
 
-    # TODO: Calculate watch on per quarter day and other time contexts
-
     Args:
         data (pd.DataFrame): HealthKit data
 
@@ -43,7 +41,7 @@ def getWatchOnHours(data: pd.DataFrame) -> pd.DataFrame:
     watch_hr_logs["date"] = watch_hr_logs["date"].dt.date
     return watch_hr_logs
 
-def qcWatchData(data: pd.DataFrame, threshold: int = 18) -> pd.DataFrame:
+def qcWatchDataDaily(data: pd.DataFrame, threshold: int = 18) -> pd.DataFrame:
     """ Set metrics from watch to NaN if watch was worn for less than threshold hours
     """
     if "watchOnHours_sum_day" not in data.columns:
@@ -68,7 +66,7 @@ def qcWatchData(data: pd.DataFrame, threshold: int = 18) -> pd.DataFrame:
     return data
 
 
-def aggregateVitals(
+def aggregateVitalsDaily(
     data,
     vital_type,
     quarter_day=True,
@@ -149,7 +147,7 @@ def aggregateVitals(
     return vital_features
 
 
-def processSleep(hk_data: pd.DataFrame) -> pd.DataFrame:
+def processSleepDaily(hk_data: pd.DataFrame) -> pd.DataFrame:
     """Process sleep time interval data from Apple HealthKit
 
     Aggregation of duration reported in HOURS
@@ -165,6 +163,8 @@ def processSleep(hk_data: pd.DataFrame) -> pd.DataFrame:
             data.type == "SleepAnalysis",
             ["local_start", "local_end", "value"],
         ].sort_values(by="local_start")
+        if sleep.empty:
+            continue
         sleep["value"] = sleep["value"].str.replace("HKCategoryValueSleepAnalysis", "")
 
         sleep["duration"] = sleep["local_end"] - sleep["local_start"]
@@ -197,7 +197,7 @@ def processSleep(hk_data: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(sleep_data)
 
 
-def processActiveDuration(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFrame:
+def processActiveDurationDaily(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFrame:
     active_data = []
     supported_types = ["StepCount", "ExerciseTime", "ActiveEnergyBurned"]
     if hk_type not in supported_types:
@@ -267,14 +267,14 @@ def processActiveDuration(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFrame:
     return pd.concat(active_data)
 
 def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
-    """Process sleep time interval data from Apple HealthKit
+    """ Calculate standard features on primary sleep metrics from Apple annotations
 
     Aggregation of duration reported in HOURS
     Args:
         hk_data (pd.DataFrame): HealthKit data
 
     Returns:
-        pd.DataFrame: Statistics on sleep time intervals
+        pd.DataFrame: Metrics on sleep per night
     """
     sleep_data = []
     for uid, data in hk_data.groupby("user_id"):
@@ -282,23 +282,36 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
             data.type == "SleepAnalysis",
             ["local_start", "local_end", "value"],
         ].sort_values(by="local_start")
-        sleep["value"] = sleep["value"].str.replace("HKCategoryValueSleepAnalysis", "")
+        if sleep.empty:
+            continue
+        hr = data[data["type"] == "HeartRate"].copy()
+        hrv = data[data["type"] == "HeartRateVariabilitySDNN"].copy()
+        sleep["value"] = sleep["value"].astype(str).str.replace("HKCategoryValueSleepAnalysis", "")
 
         sleep["duration"] = sleep["local_end"] - sleep["local_start"]
         sleep = sleep.drop_duplicates()
         # Start at noon
         noon = pd.to_datetime(sleep["local_start"].min()).replace(hour=12, minute=0, second=0, microsecond=0) 
         sleep.drop_duplicates()
-        bedrestOnset = sleep[sleep.value.isin(['InBed', 'Asleep'])]\
+        in_bed = ['InBed', 'Asleep', 'AsleepUnspecified', 'Awake', 'AwakeUnspecified', 'AsleepCore', 'AsleepDeep', 'AsleepREM']
+        asleep = ['Asleep', 'AsleepUnspecified', 'Awake', 'AwakeUnspecified', 'AsleepCore', 'AsleepDeep', 'AsleepREM']
+        bedrestOnset = sleep[sleep.value.isin(in_bed)]\
             .resample('1D', origin=noon, on='local_start')['local_start'].first().rename('bedrestOnset')
-        bedrestOffset = sleep[sleep.value.isin(['InBed', 'Asleep'])]\
+        bedrestOffset = sleep[sleep.value.isin(in_bed)]\
             .resample('1D', origin=noon, on='local_start')['local_end'].last().rename('bedrestOffset')
-        sleepOnset = sleep[sleep.value.isin(['Asleep'])]\
+        sleepOnset = sleep[sleep.value.isin(asleep)]\
             .resample('1D', origin=noon, on='local_start')['local_start'].first().rename('sleepOnset')
-        sleepOffset= sleep[sleep.value.isin(['Asleep'])]\
+        sleepOffset = sleep[sleep.value.isin(asleep)]\
             .resample('1D', origin=noon, on='local_start')['local_end'].last().rename('sleepOffset')
 
         sleep_agg = pd.concat([bedrestOnset, bedrestOffset, sleepOnset, sleepOffset], axis=1)
+        sleep_hr, sleep_hrv = [], []
+        for i, row in sleep_agg.iterrows():
+            sleep_hr.append(hr[(hr.local_start >= row.sleepOnset) & (hr.local_start <= row.sleepOffset)]['value'].median())
+            sleep_hrv.append(hrv[(hrv.local_start >= row.sleepOnset) & (hrv.local_start <= row.sleepOffset)]['value'].median())
+
+        sleep_agg['sleepHR'] = sleep_hr
+        sleep_agg['sleepHRV'] = sleep_hrv
         sleep_agg['bedrestDuration'] = (sleep_agg['bedrestOffset'] - sleep_agg['bedrestOnset']).to_numpy() / pd.Timedelta('1 hour')
         sleep_agg['sleepDuration'] = (sleep_agg['sleepOffset'] - sleep_agg['sleepOnset']).to_numpy() / pd.Timedelta('1 hour')
         sleep_agg['sleepEfficiency'] = sleep_agg['sleepDuration'] / sleep_agg['bedrestDuration']
@@ -318,4 +331,12 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
         sleep_agg["user_id"] = uid
         sleep_data.append(sleep_agg)
 
-    return pd.concat(sleep_data)
+    sleep_df = pd.concat(sleep_data)
+    rename = {}
+
+    for col in sleep_df.columns:
+        rename[col] = col
+        if col not in ["user_id", "date"]:
+            rename[col] = f"sleep_{col}_day"
+    sleep_df = sleep_df.rename(columns=rename)
+    return sleep_df

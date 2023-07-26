@@ -73,7 +73,7 @@ class DataLoader:
         ]
         is_in = [c in data.columns for c in expected_columns]
         if not all(is_in):
-            not_in = [c for c, b in zip(expected_columns, is_in) if not b]
+            not_in = [c for c in expected_columns if c not in data.columns]
             raise ValueError(
                 f"CSV file does not contain expected columns {not_in}: {path}"
             )

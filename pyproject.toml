@@ -16,6 +16,7 @@ shap = "^0.42.1"
 llvmlite = "^0.40.1"
 numba = "^0.57.1"
 pingouin = "^0.5.3"
+openpyxl = "^3.1.2"
 
 
 [tool.poetry.group.dev.dependencies]

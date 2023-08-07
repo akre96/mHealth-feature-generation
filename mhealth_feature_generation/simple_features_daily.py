@@ -41,9 +41,9 @@ def getWatchOnHours(data: pd.DataFrame) -> pd.DataFrame:
     watch_hr_logs["date"] = watch_hr_logs["date"].dt.date
     return watch_hr_logs
 
+
 def qcWatchDataDaily(data: pd.DataFrame, threshold: int = 18) -> pd.DataFrame:
-    """ Set metrics from watch to NaN if watch was worn for less than threshold hours
-    """
+    """Set metrics from watch to NaN if watch was worn for less than threshold hours"""
     if "watchOnHours_sum_day" not in data.columns:
         data["watchOnHours_sum_day"] = getWatchOnHours(data)["watchOnHours_sum_day"]
     watch_domains = [
@@ -53,16 +53,11 @@ def qcWatchDataDaily(data: pd.DataFrame, threshold: int = 18) -> pd.DataFrame:
         "spo2",
         "sleep",
     ]
-    watch_features = [
-        c for c in data.columns if c.split('_')[0] in watch_domains
-    ]
-    print('watch_features', watch_features)
+    watch_features = [c for c in data.columns if c.split("_")[0] in watch_domains]
+    print("watch_features", watch_features)
 
     # Set days with less than 18 hours of watch wear to NaN
-    data.loc[
-        data.watchOnHours_sum_day < threshold,
-        watch_features
-    ] = np.nan
+    data.loc[data.watchOnHours_sum_day < threshold, watch_features] = np.nan
     return data
 
 
@@ -223,14 +218,16 @@ def processActiveDurationDaily(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFr
         activity[hk_type] = activity[hk_type].astype(float)
         activity["duration"] = activity["local_end"] - activity["local_start"]
         try:
-            activity["ratePerSecond"] = activity[hk_type] / activity["duration"].dt.total_seconds()
+            activity["ratePerSecond"] = (
+                activity[hk_type] / activity["duration"].dt.total_seconds()
+            )
         except ZeroDivisionError:
             nonzero_act = activity.duration.dt.total_seconds() != 0
             activity["ratePerSecond"] = np.nan
-            activity.loc[
-                nonzero_act,
-                "ratePerSecond"
-            ] = activity.loc[nonzero_act, hk_type] / activity.loc[nonzero_act, "duration"].dt.total_seconds()
+            activity.loc[nonzero_act, "ratePerSecond"] = (
+                activity.loc[nonzero_act, hk_type]
+                / activity.loc[nonzero_act, "duration"].dt.total_seconds()
+            )
         activity["prev_local_end"] = activity["local_end"].shift()
         activity["prev_local_start"] = activity["local_start"].shift()
         activity["overlap"] = (activity["local_start"] < activity["prev_local_end"]) & (
@@ -266,8 +263,9 @@ def processActiveDurationDaily(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFr
         active_data.append(activity_agg.reset_index(drop=True))
     return pd.concat(active_data)
 
+
 def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
-    """ Calculate standard features on primary sleep metrics from Apple annotations
+    """Calculate standard features on primary sleep metrics from Apple annotations
 
     Aggregation of duration reported in HOURS
     Args:
@@ -286,44 +284,111 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
             continue
         hr = data[data["type"] == "HeartRate"].copy()
         hrv = data[data["type"] == "HeartRateVariabilitySDNN"].copy()
-        sleep["value"] = sleep["value"].astype(str).str.replace("HKCategoryValueSleepAnalysis", "")
+        sleep["value"] = (
+            sleep["value"].astype(str).str.replace("HKCategoryValueSleepAnalysis", "")
+        )
 
         sleep["duration"] = sleep["local_end"] - sleep["local_start"]
         sleep = sleep.drop_duplicates()
         # Start at noon
-        noon = pd.to_datetime(sleep["local_start"].min()).replace(hour=12, minute=0, second=0, microsecond=0) 
+        noon = pd.to_datetime(sleep["local_start"].min()).replace(
+            hour=12, minute=0, second=0, microsecond=0
+        )
         sleep.drop_duplicates()
-        in_bed = ['InBed', 'Asleep', 'AsleepUnspecified', 'Awake', 'AwakeUnspecified', 'AsleepCore', 'AsleepDeep', 'AsleepREM']
-        asleep = ['Asleep', 'AsleepUnspecified', 'Awake', 'AwakeUnspecified', 'AsleepCore', 'AsleepDeep', 'AsleepREM']
-        bedrestOnset = sleep[sleep.value.isin(in_bed)]\
-            .resample('1D', origin=noon, on='local_start')['local_start'].first().rename('bedrestOnset')
-        bedrestOffset = sleep[sleep.value.isin(in_bed)]\
-            .resample('1D', origin=noon, on='local_start')['local_end'].last().rename('bedrestOffset')
-        sleepOnset = sleep[sleep.value.isin(asleep)]\
-            .resample('1D', origin=noon, on='local_start')['local_start'].first().rename('sleepOnset')
-        sleepOffset = sleep[sleep.value.isin(asleep)]\
-            .resample('1D', origin=noon, on='local_start')['local_end'].last().rename('sleepOffset')
+        in_bed = [
+            "InBed",
+            "Asleep",
+            "AsleepUnspecified",
+            "Awake",
+            "AwakeUnspecified",
+            "AsleepCore",
+            "AsleepDeep",
+            "AsleepREM",
+        ]
+        asleep = [
+            "Asleep",
+            "AsleepUnspecified",
+            "Awake",
+            "AwakeUnspecified",
+            "AsleepCore",
+            "AsleepDeep",
+            "AsleepREM",
+        ]
+        bedrestOnset = (
+            sleep[sleep.value.isin(in_bed)]
+            .resample("1D", origin=noon, on="local_start")["local_start"]
+            .first()
+            .rename("bedrestOnset")
+        )
+        bedrestOffset = (
+            sleep[sleep.value.isin(in_bed)]
+            .resample("1D", origin=noon, on="local_start")["local_end"]
+            .last()
+            .rename("bedrestOffset")
+        )
+        sleepOnset = (
+            sleep[sleep.value.isin(asleep)]
+            .resample("1D", origin=noon, on="local_start")["local_start"]
+            .first()
+            .rename("sleepOnset")
+        )
+        sleepOffset = (
+            sleep[sleep.value.isin(asleep)]
+            .resample("1D", origin=noon, on="local_start")["local_end"]
+            .last()
+            .rename("sleepOffset")
+        )
 
-        sleep_agg = pd.concat([bedrestOnset, bedrestOffset, sleepOnset, sleepOffset], axis=1)
+        sleep_agg = pd.concat(
+            [bedrestOnset, bedrestOffset, sleepOnset, sleepOffset], axis=1
+        )
         sleep_hr, sleep_hrv = [], []
         for i, row in sleep_agg.iterrows():
-            sleep_hr.append(hr[(hr.local_start >= row.sleepOnset) & (hr.local_start <= row.sleepOffset)]['value'].median())
-            sleep_hrv.append(hrv[(hrv.local_start >= row.sleepOnset) & (hrv.local_start <= row.sleepOffset)]['value'].median())
+            sleep_hr.append(
+                hr[
+                    (hr.local_start >= row.sleepOnset)
+                    & (hr.local_start <= row.sleepOffset)
+                ]["value"].median()
+            )
+            sleep_hrv.append(
+                hrv[
+                    (hrv.local_start >= row.sleepOnset)
+                    & (hrv.local_start <= row.sleepOffset)
+                ]["value"].median()
+            )
 
-        sleep_agg['sleepHR'] = sleep_hr
-        sleep_agg['sleepHRV'] = sleep_hrv
-        sleep_agg['bedrestDuration'] = (sleep_agg['bedrestOffset'] - sleep_agg['bedrestOnset']).to_numpy() / pd.Timedelta('1 hour')
-        sleep_agg['sleepDuration'] = (sleep_agg['sleepOffset'] - sleep_agg['sleepOnset']).to_numpy() / pd.Timedelta('1 hour')
-        sleep_agg['sleepEfficiency'] = sleep_agg['sleepDuration'] / sleep_agg['bedrestDuration']
-        sleep_agg.loc[sleep_agg['sleepEfficiency'] > 1, 'sleepEfficiency'] = 1
-        sleep_agg['sleepOnsetLatency'] = (sleep_agg['sleepOnset'] - sleep_agg['bedrestOnset']).to_numpy() / pd.Timedelta('1 hour')
+        sleep_agg["sleepHR"] = sleep_hr
+        sleep_agg["sleepHRV"] = sleep_hrv
+        sleep_agg["bedrestDuration"] = (
+            sleep_agg["bedrestOffset"] - sleep_agg["bedrestOnset"]
+        ).to_numpy() / pd.Timedelta("1 hour")
+        sleep_agg["sleepDuration"] = (
+            sleep_agg["sleepOffset"] - sleep_agg["sleepOnset"]
+        ).to_numpy() / pd.Timedelta("1 hour")
+        sleep_agg["sleepEfficiency"] = (
+            sleep_agg["sleepDuration"] / sleep_agg["bedrestDuration"]
+        )
+        sleep_agg.loc[sleep_agg["sleepEfficiency"] > 1, "sleepEfficiency"] = 1
+        sleep_agg["sleepOnsetLatency"] = (
+            sleep_agg["sleepOnset"] - sleep_agg["bedrestOnset"]
+        ).to_numpy() / pd.Timedelta("1 hour")
 
-        sleep_agg['bedrestOnsetHours'] = (sleep_agg['bedrestOnset'] - sleep_agg.index).to_numpy() / pd.Timedelta('1 hour')
-        sleep_agg['bedrestOffsetHours'] = (sleep_agg['bedrestOffset'] - sleep_agg.index).to_numpy() / pd.Timedelta('1 hour')
-        sleep_agg['sleepOnsetHours'] = (sleep_agg['sleepOnset'] - sleep_agg.index).to_numpy() / pd.Timedelta('1 hour')
-        sleep_agg['sleepOffsetHours'] = (sleep_agg['sleepOffset'] - sleep_agg.index).to_numpy() / pd.Timedelta('1 hour')
+        sleep_agg["bedrestOnsetHours"] = (
+            sleep_agg["bedrestOnset"] - sleep_agg.index
+        ).to_numpy() / pd.Timedelta("1 hour")
+        sleep_agg["bedrestOffsetHours"] = (
+            sleep_agg["bedrestOffset"] - sleep_agg.index
+        ).to_numpy() / pd.Timedelta("1 hour")
+        sleep_agg["sleepOnsetHours"] = (
+            sleep_agg["sleepOnset"] - sleep_agg.index
+        ).to_numpy() / pd.Timedelta("1 hour")
+        sleep_agg["sleepOffsetHours"] = (
+            sleep_agg["sleepOffset"] - sleep_agg.index
+        ).to_numpy() / pd.Timedelta("1 hour")
 
-        sleep_agg = sleep_agg.drop(columns=['bedrestOnset', 'bedrestOffset', 'sleepOnset', 'sleepOffset'])
+        sleep_agg = sleep_agg.drop(
+            columns=["bedrestOnset", "bedrestOffset", "sleepOnset", "sleepOffset"]
+        )
 
         sleep_agg = sleep_agg.reset_index()
         sleep_agg["date"] = sleep_agg["local_start"].dt.date

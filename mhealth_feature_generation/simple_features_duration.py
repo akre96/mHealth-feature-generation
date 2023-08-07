@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Tuple, Literal
 import pingouin as pg
+
 try:
     from simple_features_daily import dailySleepFeatures
     from circadian_model import CircadianModel
@@ -60,18 +61,20 @@ def collectFeatures(
         [sleep, paee, hr, hrv, rr, o2sat, standing, exercise_time, steps],
         axis=1,
     )
-
+    start, end = calcStartStop(timestamp, duration)
     # Look to see if watch on in last hour for calculating if watch is on for duration < 1hour
     if (type(duration) != str) and (duration < pd.Timedelta("1h")):
         watch_on_subset = getDurationAroundTimestamp(
             hk_data, user_id, timestamp, pd.Timedelta("1h")
         )
         features["watch_on_percent"] = processWatchOnPercent(
-            watch_on_subset, resample=watch_on_resample
+            watch_on_subset,
+            resample=watch_on_resample,
+            origin=start,
         )
     else:
         features["watch_on_percent"] = processWatchOnPercent(
-            subset, resample=watch_on_resample
+            subset, resample=watch_on_resample, origin=start
         )
     features["user_id"] = user_id
     features["timestamp"] = timestamp
@@ -80,9 +83,7 @@ def collectFeatures(
     return features
 
 
-def qcWatchData(
-    features: pd.DataFrame, watch_on_threshold: float = 80
-) -> pd.DataFrame:
+def qcWatchData(features: pd.DataFrame, watch_on_threshold: float = 80) -> pd.DataFrame:
     watch_feature_roots = [
         "HeartRate",
         "HeartRateVariabilitySDNN",
@@ -99,43 +100,41 @@ def qcWatchData(
         if any([col.startswith(root) for root in watch_feature_roots])
     ]
     qc_features = features.copy()
-    duration_cols = [
-        col for col in features.columns if col.endswith("duration")
-    ]
-    value_cols = [
-        col for col in features.columns if not col.endswith("duration")
-    ]
+    duration_cols = [col for col in features.columns if col.endswith("duration")]
+    value_cols = [col for col in features.columns if not col.endswith("duration")]
     # Don't fill 0 for heart rate
     fill_value_cols = [
-        c for c in value_cols if not ((c.startswith("HEART") or c.startswith("RESPIRATORY") or c.startswith('OXYGEN')) and not c.endswith("count"))
+        c
+        for c in value_cols
+        if not (
+            (
+                c.startswith("HEART")
+                or c.startswith("RESPIRATORY")
+                or c.startswith("OXYGEN")
+            )
+            and not c.endswith("count")
+        )
     ]
     qc_features[fill_value_cols] = qc_features[fill_value_cols].fillna(0)
-    qc_features[duration_cols] = qc_features[duration_cols].fillna(
-        pd.Timedelta(0)
-    )
+    qc_features[duration_cols] = qc_features[duration_cols].fillna(pd.Timedelta(0))
     qc_features.loc[
         qc_features["watch_on_percent"] < watch_on_threshold, watch_cols
     ] = np.nan
     return qc_features
 
 
-def getDurationAroundTimestamp(
-    hk_data: pd.DataFrame,
-    user_id: int,
+def calcStartStop(
     timestamp: pd.Timestamp,
     duration: durationType,
-):
-    """Returns a DataFrame with data from user_id overlapping with duration around a timestamp"""
-    # Note returns data that has either a start OR end date within the duration
-    # This means that data may be included that is not within the duration
-
+) -> Tuple[pd.Timestamp, pd.Timestamp]:
     if duration in ["today", "yesterday"]:
         if duration == "today":
             start = pd.to_datetime(timestamp.date())
-        if duration == "yesterday":
+        elif duration == "yesterday":
             start = pd.to_datetime((timestamp - pd.Timedelta("1d")).date())
+        else:
+            raise ValueError(f"Invalid duration: {duration}")
 
-        # If duration today and timestamp before 4am then get data from previous date
         # TODO: Make function of last sleep session
         if timestamp.hour < 4:
             start = pd.to_datetime((timestamp - pd.Timedelta("1d")).date())
@@ -148,29 +147,44 @@ def getDurationAroundTimestamp(
         start = timestamp - duration
         end = timestamp
 
+    return start, end
+
+
+def getDurationAroundTimestamp(
+    hk_data: pd.DataFrame,
+    user_id: int,
+    timestamp: pd.Timestamp,
+    duration: durationType,
+):
+    """Returns a DataFrame with data from user_id overlapping with duration around a timestamp"""
+    # Note returns data that has either a start OR end date within the duration
+    # This means that data may be included that is not within the duration
+
+    start, end = calcStartStop(timestamp, duration)
+
     subset = hk_data[
         (hk_data["user_id"] == user_id)
         & (
             ((hk_data["local_end"] <= end) & (hk_data["local_end"] >= start))
-            | (
-                (hk_data["local_start"] <= end)
-                & (hk_data["local_start"] >= start)
-            )
+            | ((hk_data["local_start"] <= end) & (hk_data["local_start"] >= start))
         )
     ]
     return subset
 
 
 def processWatchOnPercent(
-    hk_data: pd.DataFrame, resample: str = "1h"
+    hk_data: pd.DataFrame,
+    resample: str = "1h",
+    origin: pd.Timestamp
+    | Literal["epoch", "start", "start_day", "end", "end_day"] = "start",
 ) -> float:
     hr = hk_data[hk_data.type == "HeartRate"]
-    watch_bool = (
-        hr["device.name"].str.contains("Apple Watch")
-    )
+    watch_bool = hr["device.name"].str.contains("Apple Watch")
     watch_bool = watch_bool.fillna(False)
     watch_hr = hr.loc[watch_bool, ["local_start", "value"]]
-    watch_hr_logs = watch_hr.set_index("local_start").resample(resample).count()
+    watch_hr_logs = (
+        watch_hr.set_index("local_start").resample(resample, origin=origin).count()
+    )
     if watch_hr.empty:
         return 0
     return (
@@ -179,26 +193,31 @@ def processWatchOnPercent(
         / watch_hr_logs.shape[0]
     )
 
+
 def aggregateDailySleep(
     hk_data: pd.DataFrame,
 ) -> pd.DataFrame:
     sleep_daily = dailySleepFeatures(hk_data)
-    sleep_agg = sleep_daily[
+    sleep_agg = (
+        sleep_daily[
             [
-            'sleep_bedrestDuration_day',
-            'sleep_sleepDuration_day',
-            'sleep_sleepEfficiency_day',
-            'sleep_sleepOnsetLatency_day',
-            'sleep_sleepHR_day',
-            'sleep_sleepHRV_day',
+                "sleep_bedrestDuration_day",
+                "sleep_sleepDuration_day",
+                "sleep_sleepEfficiency_day",
+                "sleep_sleepOnsetLatency_day",
+                "sleep_sleepHR_day",
+                "sleep_sleepHRV_day",
             ]
-    ].aggregate(["median", "min", "max", "std"]).unstack()
-    sleep_agg[
-        ('sleep_sleep_day', 'count')
-    ] = sleep_daily['sleep_sleepDuration_day'].count()
-    sleep_agg[
-        ('sleep_bedrest_day', 'count')
-    ] = sleep_daily['sleep_bedrestDuration_day'].count()
+        ]
+        .aggregate(["median", "min", "max", "std"])
+        .unstack()
+    )
+    sleep_agg[("sleep_sleep_day", "count")] = sleep_daily[
+        "sleep_sleepDuration_day"
+    ].count()
+    sleep_agg[("sleep_bedrest_day", "count")] = sleep_daily[
+        "sleep_bedrestDuration_day"
+    ].count()
     sleep_agg = pd.DataFrame(sleep_agg).T
     sleep_agg.columns = [f"{x}_{y}" for (x, y) in sleep_agg.columns]
     return sleep_agg
@@ -243,9 +262,7 @@ def processSleep(hk_data: pd.DataFrame) -> pd.DataFrame:
     ).drop(columns="x", level=0)
     s2.columns = ["sleep_" + "_".join(col).strip("_") for col in s2.columns]
     duration_cols = [
-        col
-        for col in s2.columns
-        if col.endswith("sum") or col.endswith("mean")
+        col for col in s2.columns if col.endswith("sum") or col.endswith("mean")
     ]
     s2[duration_cols] = s2[duration_cols].applymap(
         lambda x: pd.Timedelta(x) / pd.Timedelta("1h")
@@ -253,9 +270,7 @@ def processSleep(hk_data: pd.DataFrame) -> pd.DataFrame:
     return s2
 
 
-def processEventLog(
-    hk_data: pd.DataFrame, event_types: List[str]
-) -> pd.DataFrame:
+def processEventLog(hk_data: pd.DataFrame, event_types: List[str]) -> pd.DataFrame:
     types = hk_data["type"].unique()
     # Check that event_type is in types
     for event_type in event_types:
@@ -263,9 +278,7 @@ def processEventLog(
             # print(f"ERROR: {event_type} not in {types}")
             return None
 
-    events = hk_data.loc[
-        hk_data.type.isin(event_types), ["local_start", "type"]
-    ]
+    events = hk_data.loc[hk_data.type.isin(event_types), ["local_start", "type"]]
     return pd.DataFrame(events.type.value_counts()).T.reset_index(drop=True)
 
 
@@ -304,6 +317,12 @@ def processActiveDuration(hk_data: pd.DataFrame, hk_type: str) -> pd.DataFrame:
         steps["duration"].sum()
     ) / pd.Timedelta("1h")
 
+    # Drop sum on Apple Exercise Time as it is the same as duration
+    if hk_type == "AppleExerciseTime":
+        steps_agg.drop(
+            columns=[f"{hk_type}_sum"],
+            inplace=True,
+        )
     return steps_agg.reset_index(drop=True)
 
 
@@ -354,10 +373,7 @@ def aggregateVital(
         time_hours = (resamp_nona.index - resamp_nona.index[0]) / pd.Timedelta("1h")
         bounds = (0, [200, 200, 24, 48])
         p0 = [50, 50, 12, 24]
-        model = CircadianModel(
-            bounds=bounds,
-            init_params=p0
-        )        
+        model = CircadianModel(bounds=bounds, init_params=p0)
         model.fit(
             time_hours,
             resamp_nona[vital_type],

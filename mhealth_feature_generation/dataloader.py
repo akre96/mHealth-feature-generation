@@ -54,7 +54,7 @@ class DataLoader:
                 data = data.drop(columns=["body.category.value"])
 
         # If snake case, convert to camel case
-        if (data.type == "HEART_RATE").any():
+        if (data.type.str.isupper()).any():
             data["type"] = data["type"].apply(self.snakeToCamelCase)
             data["type"] = data["type"].str.replace("Sdnn", "SDNN")
 

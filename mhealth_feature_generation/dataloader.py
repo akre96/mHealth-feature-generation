@@ -59,9 +59,10 @@ class DataLoader:
             data["type"] = data["type"].str.replace("Sdnn", "SDNN")
 
             sleep_vals = data["type"].str.contains("Sleep")
-            data.loc[sleep_vals, "value"] = data.loc[sleep_vals, "value"].apply(
-                self.snakeToCamelCase
-            )
+            if sleep_vals.any():
+                data.loc[sleep_vals, "value"] = data.loc[sleep_vals, "value"].apply(
+                    self.snakeToCamelCase
+                )
 
         data = data.rename(columns={"HKTimezone": "timezone"})
         # Check expected columns exist

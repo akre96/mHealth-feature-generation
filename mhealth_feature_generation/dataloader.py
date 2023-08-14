@@ -45,9 +45,11 @@ class DataLoader:
             raise ValueError(f"Unknown file format: {path}")
 
         # If quantity and category separate, combine them to value col
-        if ("body.quantity.value" in data.columns) or ("body.category.value" in data.columns):
+        if ("body.quantity.value" in data.columns) or (
+            "body.category.value" in data.columns
+        ):
             data = data.rename(columns={"body.quantity.value": "value"})
-            if 'body.category.value' in data.columns:
+            if "body.category.value" in data.columns:
                 data.loc[data["body.category.value"].notnull(), "value"] = data.loc[
                     data["body.category.value"].notnull(), "body.category.value"
                 ]

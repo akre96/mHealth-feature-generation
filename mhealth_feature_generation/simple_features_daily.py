@@ -276,10 +276,14 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
     """
     sleep_data = []
     for uid, data in hk_data.groupby("user_id"):
-        sleep = data.loc[
-            data.type == "SleepAnalysis",
-            ["local_start", "local_end", "value"],
-        ].sort_values(by="local_start")
+        sleep = (
+            data.loc[
+                data.type == "SleepAnalysis",
+                ["local_start", "local_end", "value"],
+            ]
+            .sort_values(by="local_start")
+            .drop_duplicates()
+        )
         if sleep.empty:
             continue
         hr = data[data["type"] == "HeartRate"].copy()
@@ -308,7 +312,6 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
         asleep = [
             "Asleep",
             "AsleepUnspecified",
-            "Awake",
             "AwakeUnspecified",
             "AsleepCore",
             "AsleepDeep",
@@ -338,9 +341,16 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
             .last()
             .rename("sleepOffset")
         )
+        sleepDuration = (
+            sleep[sleep.value.isin(asleep)]
+            .resample("1D", origin=noon, on="local_start")["duration"]
+            .sum()
+            .rename("sleepDuration")
+        )
 
         sleep_agg = pd.concat(
-            [bedrestOnset, bedrestOffset, sleepOnset, sleepOffset], axis=1
+            [bedrestOnset, bedrestOffset, sleepOnset, sleepOffset, sleepDuration],
+            axis=1,
         )
         sleep_hr, sleep_hrv = [], []
         for i, row in sleep_agg.iterrows():
@@ -363,7 +373,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
             sleep_agg["bedrestOffset"] - sleep_agg["bedrestOnset"]
         ).to_numpy() / pd.Timedelta("1 hour")
         sleep_agg["sleepDuration"] = (
-            sleep_agg["sleepOffset"] - sleep_agg["sleepOnset"]
+            sleep_agg["sleepDuration"]
         ).to_numpy() / pd.Timedelta("1 hour")
         sleep_agg["sleepEfficiency"] = (
             sleep_agg["sleepDuration"] / sleep_agg["bedrestDuration"]
@@ -391,7 +401,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
         )
 
         sleep_agg = sleep_agg.reset_index()
-        sleep_agg["date"] = sleep_agg["local_start"].dt.date
+        sleep_agg["date"] = (sleep_agg.local_start + pd.Timedelta("1 day")).dt.date
         sleep_agg = sleep_agg.drop(columns=["local_start"])
         sleep_agg["user_id"] = uid
         sleep_data.append(sleep_agg)

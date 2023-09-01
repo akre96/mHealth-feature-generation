@@ -47,7 +47,9 @@ class CircadianModel:
         Returns:
             float: cosine function output
         """
-        y = mesor + amplitude * np.cos(((2 * np.pi * (t - acrophase)) / period))
+        y = mesor + amplitude * np.cos(
+            ((2 * np.pi * (t - acrophase)) / period)
+        )
         return y
 
     def calculate_residuals(self, parameters, x, y):
@@ -95,9 +97,9 @@ class CircadianModel:
         # Get time of day
         data["time"] = (
             data.pacific_time
-            - pd.to_datetime(data.iloc[0].pacific_time.date(), utc=True).tz_convert(
-                "US/Pacific"
-            )
+            - pd.to_datetime(
+                data.iloc[0].pacific_time.date(), utc=True
+            ).tz_convert("US/Pacific")
         ) / np.timedelta64(1, "h")
 
         # Number of hours with heart rate logs

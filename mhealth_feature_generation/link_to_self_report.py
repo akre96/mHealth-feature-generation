@@ -25,4 +25,6 @@ def aggregateDailyFeaturesToSelfReportWindow(
     """
     self_report_data = self_report_data.copy()
     if ["user_id", "date"] not in daily_sensor_data.columns:
-        raise ValueError("daily_sensor_data must have user_id and date columns")
+        raise ValueError(
+            "daily_sensor_data must have user_id and date columns"
+        )

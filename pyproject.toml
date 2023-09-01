@@ -26,6 +26,9 @@ matplotlib = "^3.7.1"
 autopep8 = "^2.0.2"
 pytest = "^7.4.0"
 
+[tool.black]
+line-length = 79
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

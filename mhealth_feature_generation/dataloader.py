@@ -50,8 +50,11 @@ class DataLoader:
         ):
             data = data.rename(columns={"body.quantity.value": "value"})
             if "body.category.value" in data.columns:
-                data.loc[data["body.category.value"].notnull(), "value"] = data.loc[
-                    data["body.category.value"].notnull(), "body.category.value"
+                data.loc[
+                    data["body.category.value"].notnull(), "value"
+                ] = data.loc[
+                    data["body.category.value"].notnull(),
+                    "body.category.value",
                 ]
                 data = data.drop(columns=["body.category.value"])
 
@@ -62,9 +65,9 @@ class DataLoader:
 
             sleep_vals = data["type"].str.contains("Sleep")
             if sleep_vals.any():
-                data.loc[sleep_vals, "value"] = data.loc[sleep_vals, "value"].apply(
-                    self.snakeToCamelCase
-                )
+                data.loc[sleep_vals, "value"] = data.loc[
+                    sleep_vals, "value"
+                ].apply(self.snakeToCamelCase)
 
         data = data.rename(columns={"HKTimezone": "timezone"})
         # Check expected columns exist
@@ -114,9 +117,11 @@ class DataLoader:
         if not path.suffix == ".csv":
             raise ValueError(f"File is not a CSV: {path}")
 
-        data = pd.read_csv(
-            path, parse_dates=["local_start", "local_end"], low_memory=False
+        data = pd.read_csv(path, low_memory=False)
+        data["local_start"] = pd.to_datetime(
+            data["local_start"], format="ISO8601"
         )
+        data["local_end"] = pd.to_datetime(data["local_end"], format="ISO8601")
         return data
 
     @staticmethod
@@ -125,7 +130,9 @@ class DataLoader:
         tree = ET.parse(fp.as_posix())
         return tree
 
-    def loadHealthKitXML(self, path: Path, user_id: str = "anon") -> pd.DataFrame:
+    def loadHealthKitXML(
+        self, path: Path, user_id: str = "anon"
+    ) -> pd.DataFrame:
         hk_tree = self.loadXML(path)
         # for every health record, extract the attributes into a dictionary (columns). Then create a list (rows).
         root = hk_tree.getroot()
@@ -187,7 +194,9 @@ class DataLoader:
         resamp_tz["date_raw"] = resamp_tz["startDate"].dt.date
         hk_data["date_raw"] = hk_data["startDate"].dt.date
         hk_data = hk_data.drop(columns=["HKTimeZone"])
-        hk_data = hk_data.merge(resamp_tz[["date_raw", "HKTimeZone"]], how="left")
+        hk_data = hk_data.merge(
+            resamp_tz[["date_raw", "HKTimeZone"]], how="left"
+        )
         hk_data["HKTimeZone"] = hk_data["HKTimeZone"].fillna(default_tz)
 
         hk_data["local_start"] = hk_data.apply(

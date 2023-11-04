@@ -78,6 +78,7 @@ def collectFeatures(
             origin=start,
         )
     else:
+        # TODO: Confirm that this calculates from start of duration to end of duration
         features["watch_on_percent"] = processWatchOnPercent(
             subset, resample=watch_on_resample, origin=start
         )
@@ -243,7 +244,7 @@ def processWatchOnPercent(
     )
 
 
-def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
+def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
     """Calculate standard features on primary sleep metrics from Apple annotations
     Times reported relative to midnight of the prior day, sleep metrics set
     for day after sleep period from 3pm day prior to 3pm day of sleep metric
@@ -260,11 +261,12 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
         sleep = (
             data.loc[
                 data.type == "SleepAnalysis",
-                ["local_start", "local_end", "value"],
+                ["local_start", "local_end", "value", 'user_id', 'type'],
             ]
             .sort_values(by="local_start")
             .drop_duplicates()
         )
+        sleep = combineOverlapsSleep(sleep, value_col="value")
         if sleep.empty:
             continue
         hr = data[data["type"] == "HeartRate"].copy()
@@ -286,6 +288,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
             "InBed",
             "Asleep",
             "AsleepUnspecified",
+            "CategoryValueUnknown",
             "Awake",
             "AwakeUnspecified",
             "AsleepCore",
@@ -296,10 +299,12 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
             "Asleep",
             "AsleepUnspecified",
             "AwakeUnspecified",
+            "CategoryValueUnknown",  # from documentation this indicates asleep unknown stage
             "AsleepCore",
             "AsleepDeep",
             "AsleepREM",
         ]
+        awake = ["Awake", "AwakeUnspecified"]
         bedrestOnset = (
             sleep[sleep.value.isin(in_bed)]
             .resample("1D", origin=noon, on="local_start")["local_start"]
@@ -318,18 +323,41 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
             .first()
             .rename("sleepOnset")
         )
+
         sleepOffset = (
             sleep[sleep.value.isin(asleep)]
             .resample("1D", origin=noon, on="local_start")["local_end"]
             .last()
             .rename("sleepOffset")
         )
+
         sleepDuration = (
             sleep[sleep.value.isin(asleep)]
             .resample("1D", origin=noon, on="local_start")["duration"]
             .sum()
             .rename("sleepDuration")
         )
+        # remove first awake period if it is before sleep onset and after bedrest onset
+        firstAwake = (
+            sleep[sleep.value.isin(awake)]
+            .resample("1D", origin=noon, on="local_start")[["duration", "local_start"]]
+            .first()
+        )
+        firstAwake = pd.concat(
+            [firstAwake, bedrestOnset, sleepOnset],
+            axis=1
+        )
+        firstAwake = firstAwake[
+            (firstAwake.local_start > firstAwake.bedrestOnset) & (firstAwake.local_start< firstAwake.sleepOnset)
+        ]
+        firstAwakeDuration = firstAwake["duration"].rename("firstAwakeDuration")
+        awakeDuration = (
+            sleep[sleep.value.isin(awake)]
+            .resample("1D", origin=noon, on="local_start")["duration"]
+            .sum()
+            .rename("awakeDuration")
+        )
+        # Sum awake periods after sleep onset and before sleep offset
 
         sleep_agg = pd.concat(
             [
@@ -338,9 +366,17 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
                 sleepOnset,
                 sleepOffset,
                 sleepDuration,
+                firstAwakeDuration,
+                awakeDuration,
             ],
             axis=1,
         )
+        sleep_agg['firstAwakeDuration'] = sleep_agg['firstAwakeDuration'].fillna(pd.Timedelta(0))
+
+        # Clean up bedrest onset and offset
+        sleep_agg.loc[sleep_agg['bedrestOnset'] > sleep_agg['sleepOnset'], 'bedrestOnset'] = sleep_agg.loc[sleep_agg['bedrestOnset'] > sleep_agg['sleepOnset'],'sleepOnset']
+        sleep_agg.loc[sleep_agg['bedrestOffset'] < sleep_agg['sleepOffset'], 'bedrestOffset'] = sleep_agg.loc[sleep_agg['bedrestOffset'] < sleep_agg['sleepOffset'],'sleepOffset']
+
         sleep_hr, sleep_hrv = [], []
         for i, row in sleep_agg.iterrows():
             sleep_hr.append(
@@ -359,16 +395,32 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
         hours_offset = 15
         sleep_agg["sleepHR"] = sleep_hr
         sleep_agg["sleepHRV"] = sleep_hrv
+
+        # Convert durations to hours
         sleep_agg["bedrestDuration"] = (
             sleep_agg["bedrestOffset"] - sleep_agg["bedrestOnset"]
         ).to_numpy() / pd.Timedelta("1 hour")
+
+        sleep_agg["wakeAfterSleepOnset"] = (
+            sleep_agg["awakeDuration"] - sleep_agg['firstAwakeDuration']
+        ).to_numpy() / pd.Timedelta("1 hour")
+
         sleep_agg["sleepDuration"] = (
             sleep_agg["sleepDuration"]
+        ).to_numpy() / pd.Timedelta("1 hour")
+        sleep_agg["awakeDuration"] = (
+            sleep_agg["awakeDuration"]
         ).to_numpy() / pd.Timedelta("1 hour")
         sleep_agg["sleepEfficiency"] = (
             sleep_agg["sleepDuration"] / sleep_agg["bedrestDuration"]
         )
+
+        # Set 0 sleep efficiency to NaN
+        sleep_agg.loc[sleep_agg.sleepEfficiency == 0, 'sleepEfficiency'] = np.nan
+
+        # No sleep efficiency > 1
         sleep_agg.loc[sleep_agg["sleepEfficiency"] > 1, "sleepEfficiency"] = 1
+
         sleep_agg["sleepOnsetLatency"] = (
             sleep_agg["sleepOnset"] - sleep_agg["bedrestOnset"]
         ).to_numpy() / pd.Timedelta("1 hour")
@@ -392,6 +444,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
                 "bedrestOffset",
                 "sleepOnset",
                 "sleepOffset",
+                "firstAwakeDuration",
             ]
         )
 
@@ -413,25 +466,57 @@ def dailySleepFeatures(hk_data: pd.DataFrame) -> pd.DataFrame:
         if col not in ["user_id", "date"]:
             rename[col] = f"sleep_{col}_day"
     sleep_df = sleep_df.rename(columns=rename)
+
+    if qc:
+        sleep_df = qcSleepFeatures(sleep_df)
     return sleep_df
+
+
+def qcSleepFeatures(data: pd.DataFrame) -> pd.DataFrame:
+    if "sleep_sleepEfficiency_day" in data.columns:
+        data.loc[
+            data["sleep_sleepEfficiency_day"] == 0, "sleep_sleepEfficiency_day"
+        ] = np.nan
+    if "sleep_sleepDuration_day" in data.columns:
+        data.loc[
+            data["sleep_sleepDuration_day"] == 0, "sleep_sleepDuration_day"
+        ] = np.nan
+    if "sleep_Awake_sum" in data.columns:
+        data.loc[data["sleep_Awake_sum"] > 20, "sleep_Awake_sum"] = np.nan
+    return data
+
+
+def qcActivity(data: pd.DataFrame) -> pd.DataFrame:
+    types = data["type"].unique()
+    if len(types) > 1:
+        print('ERROR: Activity data has multiple types', len(types), types)
+        return data
+    if 'ActiveEnergyBurned' in types:
+        data['activity_mins'] = (data['local_end'] - data['local_start']).dt.seconds / 60
+        data.loc[data['activity_mins'] == 0, 'value'] = np.nan
+        data.loc[data['activity_mins'] == 0, 'activity_mins'] = np.nan
+        data['kcal_per_min'] = data['value'] / data['activity_mins'] / 1000
+        data.loc[data['kcal_per_min'] < 0, 'value'] = np.nan
+        data.loc[data['kcal_per_min'] > 20, 'value'] = np.nan
+        data = data.drop(columns=['activity_mins', 'kcal_per_min'])
+    return data
 
 
 def aggregateDailySleep(
     hk_data: pd.DataFrame,
+    sleep_daily: pd.DataFrame | None = None,
+    aggs: List = ["median", "min", "max", "std"],
+    sleep_features: None | List = None
 ) -> pd.DataFrame:
-    sleep_daily = dailySleepFeatures(hk_data)
+    if sleep_daily is None:
+        sleep_daily = dailySleepFeatures(hk_data).drop(columns=["user_id", "date"])
+        if sleep_features is None:
+            sleep_features = [c for c in sleep_daily.columns]
+        if sleep_daily.empty:
+            return pd.DataFrame()
     sleep_agg = (
-        sleep_daily[
-            [
-                "sleep_bedrestDuration_day",
-                "sleep_sleepDuration_day",
-                "sleep_sleepEfficiency_day",
-                "sleep_sleepOnsetLatency_day",
-                "sleep_sleepHR_day",
-                "sleep_sleepHRV_day",
-            ]
-        ]
-        .aggregate(["median", "min", "max", "std"])
+        sleep_daily[sleep_features]
+        .aggregate(aggs)
         .unstack()
     )
     sleep_agg[("sleep_sleep_day", "count")] = sleep_daily[
@@ -445,7 +530,7 @@ def aggregateDailySleep(
     return sleep_agg
 
 
-def aggregateSleepCategories(hk_data: pd.DataFrame) -> pd.DataFrame:
+def aggregateSleepCategories(hk_data: pd.DataFrame, qc: bool = True) -> pd.DataFrame:
     """Process sleep time interval data from Apple HealthKit
 
     Aggregation of duration reported in HOURS
@@ -489,9 +574,11 @@ def aggregateSleepCategories(hk_data: pd.DataFrame) -> pd.DataFrame:
         for col in s2.columns
         if col.endswith("sum") or col.endswith("mean")
     ]
-    s2[duration_cols] = s2[duration_cols].applymap(
+    s2[duration_cols] = s2[duration_cols].map(
         lambda x: pd.Timedelta(x) / pd.Timedelta("1h")
     )
+    if qc:
+        s2 = qcSleepFeatures(s2)
     return s2
 
 
@@ -512,7 +599,11 @@ def countEventLog(
 
 
 def aggregateActiveDuration(
-    hk_data: pd.DataFrame, hk_type: str
+    hk_data: pd.DataFrame,
+    hk_type: str,
+    qc: bool = True,
+    device: str = "Apple Watch",
+    resample: None | str = "1h",
 ) -> pd.DataFrame:
     if hk_type not in ["StepCount", "AppleExerciseTime", "ActiveEnergyBurned"]:
         raise ValueError(
@@ -520,9 +611,15 @@ def aggregateActiveDuration(
         )
 
     activity = hk_data.loc[
-        hk_data.type == hk_type,
+        (hk_data.type == hk_type)
+        & (hk_data["device.name"] == device)
+        & (hk_data["body.quantity.count"] == 1)
+        ,
         ["local_start", "local_end", "value", "type", "user_id"],
     ].sort_values(by="local_start")
+
+    if qc:
+        activity = qcActivity(activity)
 
     # Combine overlapping values
     activity = combineOverlaps(activity, "value").rename(
@@ -530,8 +627,14 @@ def aggregateActiveDuration(
     )
 
     activity["duration"] = activity["local_end"] - activity["local_start"]
+
+    if resample is not None:
+        activity = activity.set_index("local_start")[[hk_type, 'duration']].resample(resample).median(numeric_only=False).fillna(0)
+    # Filter out 0 duration values
+    activity = activity[pd.to_timedelta(activity["duration"]) > pd.Timedelta(0)]
+
     activity_agg = pd.DataFrame(
-        activity[hk_type].aggregate(["sum", "count"])
+        activity[hk_type].aggregate(["mean", "count"])
     ).T
     activity_agg.columns = [f"{hk_type}_{col}" for col in activity_agg.columns]
     activity_agg[f"{hk_type}_duration"] = pd.to_timedelta(
@@ -541,7 +644,7 @@ def aggregateActiveDuration(
     # Drop sum on Apple Exercise Time as it is the same as duration
     if hk_type == "AppleExerciseTime":
         activity_agg.drop(
-            columns=[f"{hk_type}_sum"],
+            columns=[f"{hk_type}_mean"],
             inplace=True,
         )
     return activity_agg.reset_index(drop=True)
@@ -562,7 +665,7 @@ def aggregateVital(
         "kurtosis",
     ],
     linear_time_aggregations: bool = True,
-    circadian_model_aggregation: bool = False,
+    circadian_model_aggregations: bool = False,
     vital_range: Tuple[float, float] | None = None,
 ) -> pd.DataFrame:
     if vital_type not in [
@@ -582,7 +685,7 @@ def aggregateVital(
     )
     if vital.empty:
         return pd.DataFrame()
-
+    vital[vital_type] = vital[vital_type].astype(float)
     if vital_range is not None:
         vital = vital[
             vital[vital_type].between(vital_range[0], vital_range[1])
@@ -602,7 +705,7 @@ def aggregateVital(
         regression = pg.linear_regression(time_hours, resamp_nona[vital_type])
         vital_agg[f"{vital_type}_intercept"] = regression["coef"].values[0]
         vital_agg[f"{vital_type}_slope"] = regression["coef"].values[1]
-    if circadian_model_aggregation:
+    if circadian_model_aggregations:
         resamp_nona = vital_resamp.dropna()
         if resamp_nona.shape[0] < 3:
             return vital_agg.reset_index(drop=True)

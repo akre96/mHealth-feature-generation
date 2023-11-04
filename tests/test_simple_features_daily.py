@@ -1,10 +1,11 @@
 import pandas as pd
-from mhealth_feature_generation.simple_features import dailySleepFeatures
+from mhealth_feature_generation.simple_features import dailySleepFeatures, processWatchOnPercent
 from mhealth_feature_generation.simple_features_daily import (
     aggregateActiveDurationDaily,
     aggregateVitalsDaily,
     aggregateSleepCategoriesDaily,
 )
+from numpy.testing import assert_almost_equal
 
 
 def test_dailySleepFeatures_basic():
@@ -29,7 +30,7 @@ def test_dailySleepFeatures_multiple_sleep():
         "tests/test_sleep_data.xlsx", sheet_name="2_sleep_period_1_day"
     )
     sleep_feats = dailySleepFeatures(test_data)
-    print(sleep_feats[["sleep_bedrestOnsetHours_day"]])
+    print(sleep_feats[["sleep_wakeAfterSleepOnset_day"]])
 
     assert sleep_feats.shape[0] == 1
     assert (sleep_feats["sleep_bedrestDuration_day"] == 10).all()
@@ -39,6 +40,7 @@ def test_dailySleepFeatures_multiple_sleep():
     assert (sleep_feats["sleep_bedrestOffsetHours_day"] == 32).all()
     assert (sleep_feats["sleep_sleepOnsetHours_day"] == 26).all()
     assert (sleep_feats["sleep_sleepOffsetHours_day"] == 32).all()
+    assert (sleep_feats["sleep_wakeAfterSleepOnset_day"] == 6).all()
 
 
 def test_dailySleepCategories():
@@ -89,3 +91,29 @@ def test_aggregateVitalsDaily():
     )
     print(agg)
     assert agg.shape[0] == 2
+
+
+def test_processWatchOnPercent():
+    # Create a mock subset of heart rate logs
+    hr_subset = pd.DataFrame(
+        {
+            "local_start": [
+                "2022-01-01 01:00:01",
+                "2022-01-01 02:00:01",
+                "2022-01-01 03:00:01",
+                "2022-01-01 04:00:01",
+                "2022-01-01 05:00:01",
+            ],
+            "value": [70, 80, 90, 100, 110],
+            "type": ["HeartRate", "HeartRate", "HeartRate", "HeartRate", "HeartRate"],
+            "device.name": ["Apple Watch", "Apple Watch", "Apple Watch", "Apple Watch", "Apple Watch"],
+
+        }
+    )
+
+    hr_subset["local_start"] = pd.to_datetime(hr_subset["local_start"])
+    # Calculate the watch on percentage
+    watch_on_percent = processWatchOnPercent(hr_subset, resample="1h", origin="2022-01-01 00:00:00")
+
+    # Confirm that the watch on percentage is calculated from the beginning of the duration until the end
+    assert_almost_equal(watch_on_percent, 100*(5/6))

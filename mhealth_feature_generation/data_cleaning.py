@@ -67,7 +67,7 @@ def combineOverlapsSleep(
             keep="last",
         )
         .sort_values(by="local_start")
-        .reset_index()
+        .reset_index(drop=True)
     )
     activity["prev_stage"] = activity[value_col].shift()
     activity["prev_local_end"] = activity["local_end"].shift()
@@ -97,7 +97,7 @@ def combineOverlapsSleep(
     # Keep last value if different types
     for keep_ind in keep_last:
         # Leave InBed as it is from the phone
-        if not activity[keep_ind - 1][value_col] == "InBed":
+        if not activity.loc[keep_ind - 1, value_col] == "InBed":
             activity.drop(keep_ind - 1, inplace=True)
 
     activity.drop(

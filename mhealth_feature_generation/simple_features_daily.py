@@ -107,7 +107,7 @@ def aggregateVitalsDaily(
             resample=resample,
             standard_aggregations=standard_aggregations,
             linear_time_aggregations=linear_time_aggregations,
-            circadian_model_aggregation=circadian_model_aggregations,
+            circadian_model_aggregations=circadian_model_aggregations,
             vital_range=vital_range,
         )
     )
@@ -187,8 +187,6 @@ def aggregateSleepCategoriesDaily(hk_data: pd.DataFrame) -> pd.DataFrame:
             .resample("1D", on='time', origin=start_time, group_keys=True)
             .apply(aggregateSleepCategories)
         ).reset_index().rename(columns={'time': 'local_start'})
-        print('SLEEP_AGG')
-        print(sleep_agg)
 
         if sleep_agg.empty:
             continue
@@ -218,6 +216,8 @@ def aggregateActiveDurationDaily(
             data.type == hk_type,
             ["local_start", "local_end", "value", "type", "user_id"],
         ].sort_values(by="local_start")
+        if activity.empty:
+            continue
         activity["time"] = activity["local_start"]
         activity_agg = (
             activity.resample(
@@ -232,4 +232,8 @@ def aggregateActiveDurationDaily(
         activity_agg["date"] = activity_agg.local_start.dt.date
 
         active_data.append(activity_agg.reset_index(drop=True))
-    return pd.concat(active_data)
+    if len(active_data):
+        all_activity_agg = pd.concat(active_data)
+    else:
+        return pd.DataFrame(columns=["date", "user_id"])
+    return all_activity_agg

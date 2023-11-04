@@ -1,21 +1,18 @@
 [tool.poetry]
 name = "mhealth-feature-generation"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Samir Akre <sakre@g.ucla.edu>"]
 readme = "README.md"
 packages = [{include = "mhealth_feature_generation"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
-numpy = "^1.24.3"
+python = ">=3.11,<3.13"
 tqdm = "^4.65.0"
-shap = "^0.42.1"
-llvmlite = "^0.40.1"
-numba = "^0.57.1"
 pingouin = "^0.5.3"
 openpyxl = "^3.1.2"
-pandas = "^2.0.3"
+numpy = "^1.26.0"
+pandas = "^2.1.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -23,7 +20,6 @@ jupyter = "^1.0.0"
 black = "^23.3.0"
 seaborn = "^0.12.2"
 matplotlib = "^3.7.1"
-autopep8 = "^2.0.2"
 pytest = "^7.4.0"
 
 [tool.black]

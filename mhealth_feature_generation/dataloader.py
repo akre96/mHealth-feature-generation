@@ -213,3 +213,21 @@ class DataLoader:
         )
         hk_data = hk_data.rename(columns={"HKTimeZone": "timezone"})
         return hk_data
+
+    # Function to get all OPTIMA studyhealthkit data
+    def loadOPTIMAParticipantData(self, data_folder: Path, user_id: int) -> pd.DataFrame:
+        hk_data_list = []
+        sensor_folders = [
+            f for f in data_folder.expanduser().iterdir() if f.is_dir()
+        ]
+        for sensor_folder in sensor_folders:
+            sensor_path = Path(
+                sensor_folder, f"{int(user_id)}-{sensor_folder.name}.csv"
+            )
+            if not sensor_path.exists():
+                continue
+            hk_data_list.append(self.loadData(sensor_path))
+        if not hk_data_list:
+            print(f"Skipping {user_id} due to no healthkit data")
+            return pd.DataFrame()
+        return pd.concat(hk_data_list)

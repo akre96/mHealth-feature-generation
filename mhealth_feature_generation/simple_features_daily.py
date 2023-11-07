@@ -10,6 +10,7 @@ from typing import List, Tuple
 from .data_cleaning import combineOverlaps
 from .simple_features import (
     aggregateActiveDuration,
+    aggregateAudioExposure,
     aggregateSleepCategories,
     aggregateVital,
 )
@@ -228,6 +229,43 @@ def aggregateActiveDurationDaily(
             .rename(columns={"time": "local_start"})
             .drop(columns=["level_1"])
         )
+        activity_agg["user_id"] = uid
+        activity_agg["date"] = activity_agg.local_start.dt.date
+
+        active_data.append(activity_agg.reset_index(drop=True))
+    if len(active_data):
+        all_activity_agg = pd.concat(active_data)
+    else:
+        return pd.DataFrame(columns=["date", "user_id"])
+    return all_activity_agg
+
+def aggregateEnvironmentDaily(
+    hk_data: pd.DataFrame, hk_type: str
+) -> pd.DataFrame:
+    active_data = []
+    supported_types = ["EnvironmentalAudioExposure"]
+    if hk_type not in supported_types:
+        raise ValueError(
+            f"Invalid hk_type: {hk_type}, must be one of {supported_types}"
+        )
+    for uid, data in hk_data.groupby("user_id"):
+        activity = data.loc[
+            data.type == hk_type,
+            ["local_start", "local_end", "value", "type", "user_id", "device.name", "body.quantity.count"],
+        ].sort_values(by="local_start")
+        if activity.empty:
+            continue
+        activity["time"] = activity["local_start"]
+        activity_agg = (
+            activity.set_index('time').resample(
+                "1D", origin="start_day", group_keys=True
+            )[["local_start", "local_end", "value", "type", "user_id", "device.name", "body.quantity.count"]]
+            .apply(aggregateAudioExposure)
+            .reset_index()
+            .rename(columns={"time": "local_start"})
+            .drop(columns=["level_1"])
+        )
+        print(activity_agg)
         activity_agg["user_id"] = uid
         activity_agg["date"] = activity_agg.local_start.dt.date
 

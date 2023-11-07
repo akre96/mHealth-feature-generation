@@ -2,6 +2,7 @@ import pandas as pd
 from mhealth_feature_generation.simple_features import dailySleepFeatures, processWatchOnPercent
 from mhealth_feature_generation.simple_features_daily import (
     aggregateActiveDurationDaily,
+    aggregateEnvironmentDaily,
     aggregateVitalsDaily,
     aggregateSleepCategoriesDaily,
 )
@@ -118,3 +119,15 @@ def test_processWatchOnPercent():
 
     # Confirm that the watch on percentage is calculated from the beginning of the duration until the end
     assert_almost_equal(watch_on_percent, 100*(5/6))
+
+def test_audio_exposure_daily():
+    test_data = pd.read_excel("tests/test_environment_data.xlsx", sheet_name='audio_exposure')
+    audio_feats = aggregateEnvironmentDaily(test_data, 'EnvironmentalAudioExposure')
+    print(audio_feats)
+    duration_mins = round(audio_feats['audioExposure_hours'].values[0]*60)
+    assert audio_feats.shape[0] == 1
+    assert audio_feats['audioExposure_mean'].values[0] == 65
+    assert audio_feats['audioExposure_count'].values[0] == 101
+    assert audio_feats['audioExposure_entries'].values[0] == 2
+    assert duration_mins == 31
+    assert audio_feats['user_id'].values[0] == 'test'

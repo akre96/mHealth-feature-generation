@@ -501,6 +501,32 @@ def qcActivity(data: pd.DataFrame) -> pd.DataFrame:
         data = data.drop(columns=['activity_mins', 'kcal_per_min'])
     return data
 
+def aggregateAudioExposure(
+        hk_data: pd.DataFrame,
+        resample: str = "1h",
+) -> pd.DataFrame:
+    print('IN AUDIO EXPOSURE')
+    print(hk_data)
+    overlap_combined = combineOverlaps(hk_data, 'value')
+    print('OVERLAP COMBINED')
+    print(overlap_combined)
+    overlap_combined['duration'] = overlap_combined['local_end'] - overlap_combined['local_start']
+    resamp = overlap_combined.set_index('local_start')[['body.quantity.count', 'duration', 'value']].resample(resample).median()
+    agg = pd.DataFrame(resamp.aggregate({
+        'duration': 'sum',
+        'value': 'mean',
+        'body.quantity.count': 'sum',
+    }))
+    agg = agg.T.rename(columns={
+        'duration': 'audioExposure_hours',
+        'value': 'audioExposure_mean',
+        'body.quantity.count': 'audioExposure_count',
+    })
+    agg['audioExposure_entries'] = resamp.value.count()
+    agg['user_id'] = hk_data['user_id'].unique()[0]
+    agg['audioExposure_hours'] = agg['audioExposure_hours'] / pd.Timedelta('1h')
+    return agg
+
 
 def aggregateDailySleep(
     hk_data: pd.DataFrame,

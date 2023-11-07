@@ -214,7 +214,7 @@ def aggregateActiveDurationDaily(
     for uid, data in hk_data.groupby("user_id"):
         activity = data.loc[
             data.type == hk_type,
-            ["local_start", "local_end", "value", "type", "user_id"],
+            ["local_start", "local_end", "value", "type", "user_id", "device.name", "body.quantity.count"],
         ].sort_values(by="local_start")
         if activity.empty:
             continue

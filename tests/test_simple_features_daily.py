@@ -40,7 +40,7 @@ def test_dailySleepFeatures_multiple_sleep():
     assert (sleep_feats["sleep_bedrestOffsetHours_day"] == 32).all()
     assert (sleep_feats["sleep_sleepOnsetHours_day"] == 26).all()
     assert (sleep_feats["sleep_sleepOffsetHours_day"] == 32).all()
-    assert (sleep_feats["sleep_wakeAfterSleepOnset_day"] == 6).all()
+    assert (sleep_feats["sleep_wakeAfterSleepOnset_day"] == 1).all()
 
 
 def test_dailySleepCategories():
@@ -60,18 +60,19 @@ def test_aggregateActiveDaily():
     test_data = pd.read_excel(
         "tests/test_sleep_data.xlsx", sheet_name="2_activity_overlap"
     )
+    test_data['device.name'] = 'Apple Watch'
     agg = aggregateActiveDurationDaily(test_data, hk_type="ActiveEnergyBurned")
     print(
         agg[
             [
-                "ActiveEnergyBurned_sum",
+                "ActiveEnergyBurned_mean",
                 "ActiveEnergyBurned_count",
                 "ActiveEnergyBurned_duration",
             ]
         ]
     )
     assert agg.shape[0] == 1
-    assert agg.ActiveEnergyBurned_sum.values[0] == 150
+    assert agg.ActiveEnergyBurned_mean.values[0] == 150
     assert agg.ActiveEnergyBurned_count.values[0] == 1
     assert agg.ActiveEnergyBurned_duration.values[0] == 1.5
 

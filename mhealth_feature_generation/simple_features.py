@@ -270,7 +270,9 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
         if sleep.empty:
             continue
         hr = data[data["type"] == "HeartRate"].copy()
+        hr['value'] = hr['value'].astype(float)
         hrv = data[data["type"] == "HeartRateVariabilitySDNN"].copy()
+        hrv['value'] = hrv['value'].astype(float)
         sleep["value"] = (
             sleep["value"]
             .astype(str)
@@ -316,6 +318,12 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
             .resample("1D", origin=noon, on="local_start")["local_end"]
             .last()
             .rename("bedrestOffset")
+        )
+        bedrestDuration = (
+            sleep[sleep.value.isin(in_bed)]
+            .resample("1D", origin=noon, on="local_start")["duration"]
+            .sum()
+            .rename("bedrestDuration")
         )
         sleepOnset = (
             sleep[sleep.value.isin(asleep)]
@@ -363,6 +371,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
             [
                 bedrestOnset,
                 bedrestOffset,
+                bedrestDuration,
                 sleepOnset,
                 sleepOffset,
                 sleepDuration,
@@ -398,7 +407,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
 
         # Convert durations to hours
         sleep_agg["bedrestDuration"] = (
-            sleep_agg["bedrestOffset"] - sleep_agg["bedrestOnset"]
+            sleep_agg["bedrestDuration"]
         ).to_numpy() / pd.Timedelta("1 hour")
 
         sleep_agg["wakeAfterSleepOnset"] = (
@@ -495,9 +504,9 @@ def qcActivity(data: pd.DataFrame) -> pd.DataFrame:
         data['activity_mins'] = (data['local_end'] - data['local_start']).dt.seconds / 60
         data.loc[data['activity_mins'] == 0, 'value'] = np.nan
         data.loc[data['activity_mins'] == 0, 'activity_mins'] = np.nan
-        data['kcal_per_min'] = data['value'] / data['activity_mins'] / 1000
+        data['kcal_per_min'] = data['value'].astype(float) / data['activity_mins'].astype(float) / 1000
         data.loc[data['kcal_per_min'] < 0, 'value'] = np.nan
-        data.loc[data['kcal_per_min'] > 20, 'value'] = np.nan
+        data.loc[data['kcal_per_min'] > 30, 'value'] = np.nan
         data = data.drop(columns=['activity_mins', 'kcal_per_min'])
     return data
 
@@ -505,11 +514,11 @@ def aggregateAudioExposure(
         hk_data: pd.DataFrame,
         resample: str = "1h",
 ) -> pd.DataFrame:
-    print('IN AUDIO EXPOSURE')
-    print(hk_data)
-    overlap_combined = combineOverlaps(hk_data, 'value')
-    print('OVERLAP COMBINED')
-    print(overlap_combined)
+    audio_data = hk_data[
+        hk_data.type == "EnvironmentalAudioExposure"
+    ].copy()
+    audio_data['value'] = audio_data['value'].astype(float)
+    overlap_combined = combineOverlaps(audio_data, 'value')
     overlap_combined['duration'] = overlap_combined['local_end'] - overlap_combined['local_start']
     resamp = overlap_combined.set_index('local_start')[['body.quantity.count', 'duration', 'value']].resample(resample).median()
     agg = pd.DataFrame(resamp.aggregate({
@@ -523,7 +532,6 @@ def aggregateAudioExposure(
         'body.quantity.count': 'audioExposure_count',
     })
     agg['audioExposure_entries'] = resamp.value.count()
-    agg['user_id'] = hk_data['user_id'].unique()[0]
     agg['audioExposure_hours'] = agg['audioExposure_hours'] / pd.Timedelta('1h')
     return agg
 
@@ -644,6 +652,7 @@ def aggregateActiveDuration(
         ["local_start", "local_end", "value", "type", "user_id"],
     ].sort_values(by="local_start")
 
+    activity['value'] = activity['value'].astype(float)
     if qc:
         activity = qcActivity(activity)
 

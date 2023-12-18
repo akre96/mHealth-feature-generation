@@ -266,13 +266,15 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
             .sort_values(by="local_start")
             .drop_duplicates()
         )
-        sleep = combineOverlapsSleep(sleep, value_col="value")
+        sleep = combineOverlapsSleep(sleep, value_col="value").drop_duplicates()
         if sleep.empty:
             continue
         hr = data[data["type"] == "HeartRate"].copy()
         hr['value'] = hr['value'].astype(float)
         hrv = data[data["type"] == "HeartRateVariabilitySDNN"].copy()
         hrv['value'] = hrv['value'].astype(float)
+        noise = data[data["type"] == "EnvironmentalAudioExposure"].copy()
+        noise['value'] = noise['value'].astype(float)
         sleep["value"] = (
             sleep["value"]
             .astype(str)
@@ -280,7 +282,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
         )
 
         sleep["duration"] = sleep["local_end"] - sleep["local_start"]
-        sleep = sleep.drop_duplicates()
+
         # Start at 3pm
         noon = pd.to_datetime(sleep["local_start"].min()).replace(
             hour=15, minute=0, second=0, microsecond=0
@@ -386,7 +388,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
         sleep_agg.loc[sleep_agg['bedrestOnset'] > sleep_agg['sleepOnset'], 'bedrestOnset'] = sleep_agg.loc[sleep_agg['bedrestOnset'] > sleep_agg['sleepOnset'],'sleepOnset']
         sleep_agg.loc[sleep_agg['bedrestOffset'] < sleep_agg['sleepOffset'], 'bedrestOffset'] = sleep_agg.loc[sleep_agg['bedrestOffset'] < sleep_agg['sleepOffset'],'sleepOffset']
 
-        sleep_hr, sleep_hrv = [], []
+        sleep_hr, sleep_hrv, sleep_noise = [], [], []
         for i, row in sleep_agg.iterrows():
             sleep_hr.append(
                 hr[
@@ -400,10 +402,17 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc:bool = True) -> pd.DataFrame:
                     & (hrv.local_start <= row.sleepOffset)
                 ]["value"].median()
             )
+            sleep_noise.append(
+                noise[
+                    (noise.local_start >= row.sleepOnset)
+                    & (noise.local_start <= row.sleepOffset)
+                ]["value"].median()
+            )
         # Starting at 3pm offsets the hour by 15 hours from prior midnight
         hours_offset = 15
         sleep_agg["sleepHR"] = sleep_hr
         sleep_agg["sleepHRV"] = sleep_hrv
+        sleep_agg["sleepNoise"] = sleep_noise
 
         # Convert durations to hours
         sleep_agg["bedrestDuration"] = (
@@ -669,7 +678,7 @@ def aggregateActiveDuration(
     activity = activity[pd.to_timedelta(activity["duration"]) > pd.Timedelta(0)]
 
     activity_agg = pd.DataFrame(
-        activity[hk_type].aggregate(["mean", "count"])
+        activity[hk_type].aggregate(["sum", "count"])
     ).T
     activity_agg.columns = [f"{hk_type}_{col}" for col in activity_agg.columns]
     activity_agg[f"{hk_type}_duration"] = pd.to_timedelta(
@@ -677,7 +686,7 @@ def aggregateActiveDuration(
     ) / pd.Timedelta("1h")
 
     # Drop sum on Apple Exercise Time as it is the same as duration
-    if hk_type == "AppleExerciseTime":
+    if hk_type == "AppleExerciseTime" and f"{hk_type}_mean" in activity_agg.columns:
         activity_agg.drop(
             columns=[f"{hk_type}_mean"],
             inplace=True,

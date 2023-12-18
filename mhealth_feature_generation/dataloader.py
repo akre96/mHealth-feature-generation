@@ -147,9 +147,8 @@ class DataLoader:
         # create DataFrame from a list (rows) of dictionaries (columns)
         print("Converting Tree to DataFrame")
         data = pd.DataFrame(record_list)
-        data.loc[data["type"] == "SleepAnalysis", "value"] = data.loc[
-            data["type"] == "SleepAnalysis", "value"
-        ].str.replace("HKCategoryValueSleepAnalysis", "")
+
+        print('Cleaning up data')
 
         # proper type to dates
         for col in ["creationDate", "startDate", "endDate"]:
@@ -158,9 +157,24 @@ class DataLoader:
         # shorter observation names: use vectorized replace function
         data["type"] = data["type"].str.replace("HKQuantityTypeIdentifier", "")
         data["type"] = data["type"].str.replace("HKCategoryTypeIdentifier", "")
+        data["type"] = data["type"].str.replace("HKDataType", "")
+
+        data.loc[data["type"] == "SleepAnalysis", "value"] = data.loc[
+            data["type"] == "SleepAnalysis", "value"
+        ].str.replace("HKCategoryValueSleepAnalysis", "")
+        data['body.quantity.count'] = 1
+        data['device.name'] = data['device'].apply(self.getDeviceName)
         data["user_id"] = user_id
         return data
 
+    @staticmethod
+    def getDeviceName(input):
+        if input is None:
+            return None
+        if type(input) != str:
+            return None
+        return input.split(', ')[1].replace('name:', '')
+    
     @staticmethod
     def addLocalTime(
         hk_data: pd.DataFrame, default_tz: str = "America/Los_Angeles"

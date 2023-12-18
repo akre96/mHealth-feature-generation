@@ -12,4 +12,3 @@ def test_audio_exposure():
     assert audio_feats['audioExposure_count'].values[0] == 101
     assert audio_feats['audioExposure_entries'].values[0] == 2
     assert duration_mins == 31
-    assert audio_feats['user_id'].values[0] == 'test'

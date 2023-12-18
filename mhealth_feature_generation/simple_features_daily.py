@@ -7,13 +7,64 @@ Time can be "day" or in quarter days with values "h0", "h6", "h12", "h18". Time 
 import pandas as pd
 import numpy as np
 from typing import List, Tuple
-from .data_cleaning import combineOverlaps
 from .simple_features import (
     aggregateActiveDuration,
     aggregateAudioExposure,
     aggregateSleepCategories,
     aggregateVital,
+    dailySleepFeatures,
 )
+
+def collectAllDailyFeatures(data: pd.DataFrame) -> pd.DataFrame:
+    watch_on_hours = getWatchOnHoursDaily(data)
+    hr_features = aggregateVitalsDaily(
+        data,
+        "HeartRate",
+        circadian_model_aggregations=True,
+        linear_time_aggregations=True,
+    )
+    if hr_features.empty:
+        print("No heart rate data")
+
+    hrv_features = aggregateVitalsDaily(data, "HeartRateVariabilitySDNN", linear_time_aggregations=True, circadian_model_aggregations=True)
+    if hrv_features.empty:
+        print("No HRV data")
+
+    rr_features = aggregateVitalsDaily(data, "RespiratoryRate")
+    if rr_features.empty:
+        print("No RR data")
+
+    o2_features = aggregateVitalsDaily(data, "OxygenSaturation")
+    if o2_features.empty:
+        print("No O2 data")
+
+    active_energy_features = aggregateActiveDurationDaily(data, "ActiveEnergyBurned")
+    if active_energy_features.empty:
+        print("No Active Energy data")
+
+    sleep_features = aggregateSleepCategoriesDaily(data)
+    if sleep_features.empty:
+        print("No sleep data")
+
+    sleep_annot_features = dailySleepFeatures(data)
+    if sleep_annot_features.empty:
+        print("No sleep annotation data")
+
+    audioExposure_features = aggregateEnvironmentDaily(data, "EnvironmentalAudioExposure")
+    if audioExposure_features.empty:
+        print("No audio exposure data")
+
+    hk_features = (
+        hr_features.merge(hrv_features, on=["date", "user_id"], how="outer")
+        .merge(rr_features, on=["date", "user_id"], how="outer")
+        .merge(o2_features, on=["date", "user_id"], how="outer")
+        .merge(watch_on_hours, on=["date", "user_id"], how="outer")
+        .merge(sleep_features, on=["date", "user_id"], how="outer")
+        .merge(active_energy_features, on=["date", "user_id"], how="outer")
+        .merge(sleep_annot_features, on=["date", "user_id"], how="outer")
+        .merge(audioExposure_features, on=["date", "user_id"], how="outer")
+    )
+    return hk_features
 
 
 def getWatchOnHoursDaily(data: pd.DataFrame) -> pd.DataFrame:
@@ -265,7 +316,6 @@ def aggregateEnvironmentDaily(
             .rename(columns={"time": "local_start"})
             .drop(columns=["level_1"])
         )
-        print(activity_agg)
         activity_agg["user_id"] = uid
         activity_agg["date"] = activity_agg.local_start.dt.date
 
@@ -274,4 +324,4 @@ def aggregateEnvironmentDaily(
         all_activity_agg = pd.concat(active_data)
     else:
         return pd.DataFrame(columns=["date", "user_id"])
-    return all_activity_agg
+    return all_activity_agg.drop(columns='local_start')

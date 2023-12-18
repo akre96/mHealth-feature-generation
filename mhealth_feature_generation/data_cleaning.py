@@ -54,6 +54,26 @@ def combineOverlaps(
 def combineOverlapsSleep(
     user_hk_data: pd.DataFrame, value_col: str
 ) -> pd.DataFrame:
+    in_bed = [
+        "InBed",
+        "Asleep",
+        "AsleepUnspecified",
+        "CategoryValueUnknown",
+        "Awake",
+        "AwakeUnspecified",
+        "AsleepCore",
+        "AsleepDeep",
+        "AsleepREM",
+    ]
+    asleep = [
+        "Asleep",
+        "AsleepUnspecified",
+        "AwakeUnspecified",
+        "CategoryValueUnknown",  # from documentation this indicates asleep unknown stage
+        "AsleepCore",
+        "AsleepDeep",
+        "AsleepREM",
+    ]
     activity = (
         user_hk_data.copy()
         .drop_duplicates(
@@ -82,6 +102,9 @@ def combineOverlapsSleep(
     activity["combine_overlap"] = (
         activity.prev_stage == activity[value_col]
     ) & activity.overlap
+    activity["split_overlap"] = (
+        activity.prev_stage != activity[value_col]
+    ) & activity.overlap
     combine_overlap = activity[activity.combine_overlap].index
 
     # Combines duration if same type
@@ -91,8 +114,25 @@ def combineOverlapsSleep(
             "local_start"
         ].min()
         activity.drop(overlap_ind - 1, inplace=True)
+    
+    # Split duration if different types
+    split_overlap = activity[activity.split_overlap].index
+    for overlap_ind in split_overlap:
+        overlap_rows = activity.loc[[overlap_ind - 1, overlap_ind], :]
+        asleep_cat = overlap_rows[value_col].isin(asleep)
+        # If both asleep or both not sleep, merge with last
+        if asleep_cat.all() or not asleep_cat.any():
+            activity.loc[overlap_ind, "local_end"] = overlap_rows[
+                "local_end"
+            ].max()
+            activity.drop(overlap_ind - 1, inplace=True)
+        # If one asleep and one not, split prioritize last
+        else:
+            activity.loc[overlap_ind - 1, "local_end"] = activity.loc[
+                overlap_ind, "local_start"]
 
-    keep_last = activity[~(activity.combine_overlap) & activity.overlap].index
+
+    keep_last = activity[~(activity.combine_overlap) & activity.overlap & ~(activity.split_overlap)].index
 
     # Keep last value if different types
     for keep_ind in keep_last:

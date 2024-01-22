@@ -15,6 +15,7 @@ from .simple_features import (
     dailySleepFeatures,
 )
 
+
 def collectAllDailyFeatures(data: pd.DataFrame) -> pd.DataFrame:
     watch_on_hours = getWatchOnHoursDaily(data)
     hr_features = aggregateVitalsDaily(
@@ -26,7 +27,12 @@ def collectAllDailyFeatures(data: pd.DataFrame) -> pd.DataFrame:
     if hr_features.empty:
         print("No heart rate data")
 
-    hrv_features = aggregateVitalsDaily(data, "HeartRateVariabilitySDNN", linear_time_aggregations=True, circadian_model_aggregations=True)
+    hrv_features = aggregateVitalsDaily(
+        data,
+        "HeartRateVariabilitySDNN",
+        linear_time_aggregations=True,
+        circadian_model_aggregations=True,
+    )
     if hrv_features.empty:
         print("No HRV data")
 
@@ -38,7 +44,9 @@ def collectAllDailyFeatures(data: pd.DataFrame) -> pd.DataFrame:
     if o2_features.empty:
         print("No O2 data")
 
-    active_energy_features = aggregateActiveDurationDaily(data, "ActiveEnergyBurned")
+    active_energy_features = aggregateActiveDurationDaily(
+        data, "ActiveEnergyBurned"
+    )
     if active_energy_features.empty:
         print("No Active Energy data")
 
@@ -50,7 +58,9 @@ def collectAllDailyFeatures(data: pd.DataFrame) -> pd.DataFrame:
     if sleep_annot_features.empty:
         print("No sleep annotation data")
 
-    audioExposure_features = aggregateEnvironmentDaily(data, "EnvironmentalAudioExposure")
+    audioExposure_features = aggregateEnvironmentDaily(
+        data, "EnvironmentalAudioExposure"
+    )
     if audioExposure_features.empty:
         print("No audio exposure data")
 
@@ -222,7 +232,7 @@ def aggregateSleepCategoriesDaily(hk_data: pd.DataFrame) -> pd.DataFrame:
     for uid, data in hk_data.groupby("user_id"):
         sleep = data.loc[
             data.type == "SleepAnalysis",
-            ["local_start", "local_end", "value", "type", 'user_id'],
+            ["local_start", "local_end", "value", "type", "user_id"],
         ].sort_values(by="local_start")
         if sleep.empty:
             continue
@@ -232,26 +242,32 @@ def aggregateSleepCategoriesDaily(hk_data: pd.DataFrame) -> pd.DataFrame:
         start_time = pd.to_datetime(sleep["local_start"].min()).replace(
             hour=15, minute=0, second=0, microsecond=0
         )
-        sleep['time'] = sleep['local_start']
+        sleep["time"] = sleep["local_start"]
 
         sleep_agg = (
-            sleep
-            .resample("1D", on='time', origin=start_time, group_keys=True)
-            .apply(aggregateSleepCategories)
-        ).reset_index().rename(columns={'time': 'local_start'})
+            (
+                sleep.resample(
+                    "1D", on="time", origin=start_time, group_keys=True
+                ).apply(aggregateSleepCategories)
+            )
+            .reset_index()
+            .rename(columns={"time": "local_start"})
+        )
 
         if sleep_agg.empty:
             continue
 
         sleep_agg = sleep_agg.reset_index()
-        sleep_agg["date"] = (sleep_agg["local_start"] + pd.Timedelta('1D')).dt.date
+        sleep_agg["date"] = (
+            sleep_agg["local_start"] + pd.Timedelta("1D")
+        ).dt.date
         sleep_agg = sleep_agg.drop(columns=["local_start"])
         sleep_agg["user_id"] = uid
         sleep_data.append(sleep_agg)
 
     if len(sleep_data) == 0:
         return pd.DataFrame(columns=["user_id", "date"])
-    return pd.concat(sleep_data).drop(columns=['level_1', 'index'])
+    return pd.concat(sleep_data).drop(columns=["level_1", "index"])
 
 
 def aggregateActiveDurationDaily(
@@ -266,7 +282,15 @@ def aggregateActiveDurationDaily(
     for uid, data in hk_data.groupby("user_id"):
         activity = data.loc[
             data.type == hk_type,
-            ["local_start", "local_end", "value", "type", "user_id", "device.name", "body.quantity.count"],
+            [
+                "local_start",
+                "local_end",
+                "value",
+                "type",
+                "user_id",
+                "device.name",
+                "body.quantity.count",
+            ],
         ].sort_values(by="local_start")
         if activity.empty:
             continue
@@ -290,6 +314,7 @@ def aggregateActiveDurationDaily(
         return pd.DataFrame(columns=["date", "user_id"])
     return all_activity_agg
 
+
 def aggregateEnvironmentDaily(
     hk_data: pd.DataFrame, hk_type: str
 ) -> pd.DataFrame:
@@ -302,15 +327,32 @@ def aggregateEnvironmentDaily(
     for uid, data in hk_data.groupby("user_id"):
         activity = data.loc[
             data.type == hk_type,
-            ["local_start", "local_end", "value", "type", "user_id", "device.name", "body.quantity.count"],
+            [
+                "local_start",
+                "local_end",
+                "value",
+                "type",
+                "user_id",
+                "device.name",
+                "body.quantity.count",
+            ],
         ].sort_values(by="local_start")
         if activity.empty:
             continue
         activity["time"] = activity["local_start"]
         activity_agg = (
-            activity.set_index('time').resample(
-                "1D", origin="start_day", group_keys=True
-            )[["local_start", "local_end", "value", "type", "user_id", "device.name", "body.quantity.count"]]
+            activity.set_index("time")
+            .resample("1D", origin="start_day", group_keys=True)[
+                [
+                    "local_start",
+                    "local_end",
+                    "value",
+                    "type",
+                    "user_id",
+                    "device.name",
+                    "body.quantity.count",
+                ]
+            ]
             .apply(aggregateAudioExposure)
             .reset_index()
             .rename(columns={"time": "local_start"})
@@ -324,4 +366,4 @@ def aggregateEnvironmentDaily(
         all_activity_agg = pd.concat(active_data)
     else:
         return pd.DataFrame(columns=["date", "user_id"])
-    return all_activity_agg.drop(columns='local_start')
+    return all_activity_agg.drop(columns="local_start")

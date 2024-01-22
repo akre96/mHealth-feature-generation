@@ -114,7 +114,7 @@ def combineOverlapsSleep(
             "local_start"
         ].min()
         activity.drop(overlap_ind - 1, inplace=True)
-    
+
     # Split duration if different types
     split_overlap = activity[activity.split_overlap].index
     for overlap_ind in split_overlap:
@@ -129,10 +129,14 @@ def combineOverlapsSleep(
         # If one asleep and one not, split prioritize last
         else:
             activity.loc[overlap_ind - 1, "local_end"] = activity.loc[
-                overlap_ind, "local_start"]
+                overlap_ind, "local_start"
+            ]
 
-
-    keep_last = activity[~(activity.combine_overlap) & activity.overlap & ~(activity.split_overlap)].index
+    keep_last = activity[
+        ~(activity.combine_overlap)
+        & activity.overlap
+        & ~(activity.split_overlap)
+    ].index
 
     # Keep last value if different types
     for keep_ind in keep_last:

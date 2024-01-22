@@ -148,7 +148,7 @@ class DataLoader:
         print("Converting Tree to DataFrame")
         data = pd.DataFrame(record_list)
 
-        print('Cleaning up data')
+        print("Cleaning up data")
 
         # proper type to dates
         for col in ["creationDate", "startDate", "endDate"]:
@@ -162,8 +162,8 @@ class DataLoader:
         data.loc[data["type"] == "SleepAnalysis", "value"] = data.loc[
             data["type"] == "SleepAnalysis", "value"
         ].str.replace("HKCategoryValueSleepAnalysis", "")
-        data['body.quantity.count'] = 1
-        data['device.name'] = data['device'].apply(self.getDeviceName)
+        data["body.quantity.count"] = 1
+        data["device.name"] = data["device"].apply(self.getDeviceName)
         data["user_id"] = user_id
         return data
 
@@ -173,8 +173,8 @@ class DataLoader:
             return None
         if type(input) != str:
             return None
-        return input.split(', ')[1].replace('name:', '')
-    
+        return input.split(", ")[1].replace("name:", "")
+
     @staticmethod
     def addLocalTime(
         hk_data: pd.DataFrame, default_tz: str = "America/Los_Angeles"
@@ -229,7 +229,9 @@ class DataLoader:
         return hk_data
 
     # Function to get all OPTIMA studyhealthkit data
-    def loadOPTIMAParticipantData(self, data_folder: Path, user_id: int) -> pd.DataFrame:
+    def loadOPTIMAParticipantData(
+        self, data_folder: Path, user_id: int
+    ) -> pd.DataFrame:
         hk_data_list = []
         sensor_folders = [
             f for f in data_folder.expanduser().iterdir() if f.is_dir()

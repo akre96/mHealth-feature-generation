@@ -20,6 +20,31 @@ except ModuleNotFoundError:
 
 durationType = pd.Timedelta | Literal["today", "yesterday"] | str
 
+IN_BED_CATEGORIES = [
+    "InBed",
+    "Asleep",
+    "AsleepUnspecified",
+    "CategoryValueUnknown",
+    "Awake",
+    "AwakeUnspecified",
+    "AsleepCore",
+    "AsleepDeep",
+    "AsleepREM",
+]
+ASLEEP_CATEGORIES = [
+    "Asleep",
+    "AsleepUnspecified",
+    "AwakeUnspecified",
+    "CategoryValueUnknown",  # from documentation this indicates asleep unknown stage
+    "AsleepCore",
+    "AsleepDeep",
+    "AsleepREM",
+]
+ACTIVITY_SAMPLE_TYPES = [
+    "StepCount",
+    "AppleExerciseTime",
+    "ActiveEnergyBurned",
+]
 
 def collectFeatures(
     hk_data: pd.DataFrame,
@@ -228,7 +253,7 @@ def processWatchOnPercent(
     """
     hr = hk_data[hk_data.type == "HeartRate"]
     watch_bool = hr["device.name"].str.contains("Apple Watch")
-    watch_bool = watch_bool.fillna(False)
+    watch_bool = watch_bool.astype(bool).fillna(False)
     watch_hr = hr.loc[watch_bool, ["local_start", "value"]]
     watch_hr_logs = (
         watch_hr.set_index("local_start")
@@ -320,26 +345,8 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc: bool = True) -> pd.DataFrame:
             hour=15, minute=0, second=0, microsecond=0
         )
         sleep.drop_duplicates()
-        in_bed = [
-            "InBed",
-            "Asleep",
-            "AsleepUnspecified",
-            "CategoryValueUnknown",
-            "Awake",
-            "AwakeUnspecified",
-            "AsleepCore",
-            "AsleepDeep",
-            "AsleepREM",
-        ]
-        asleep = [
-            "Asleep",
-            "AsleepUnspecified",
-            "AwakeUnspecified",
-            "CategoryValueUnknown",  # from documentation this indicates asleep unknown stage
-            "AsleepCore",
-            "AsleepDeep",
-            "AsleepREM",
-        ]
+        in_bed = IN_BED_CATEGORIES
+        asleep = ASLEEP_CATEGORIES
         awake = ["Awake", "AwakeUnspecified"]
         bedrestOnset = (
             sleep[sleep.value.isin(in_bed)]
@@ -794,7 +801,9 @@ def aggregateVital(
     linear_time_aggregations: bool = True,
     circadian_model_aggregations: bool = False,
     vital_range: Tuple[float, float] | None = None,
+    context: Literal['non-sleep rest', 'sleep', 'active', 'all'] = 'all'
 ) -> pd.DataFrame:
+    
     if vital_type not in [
         "HeartRate",
         "HeartRateVariabilitySDNN",
@@ -810,6 +819,50 @@ def aggregateVital(
         .rename(columns={"value": vital_type})
         .drop_duplicates()
     )
+    context_str = ''
+    if context != 'all':
+        sleep_periods= hk_data.loc[
+            (hk_data.type == "SleepAnalysis") &
+            (
+                hk_data.value.isin(ASLEEP_CATEGORIES) |
+                hk_data.value.isin(IN_BED_CATEGORIES)
+            ),
+            ["local_start", "local_end"],
+        ]
+        active_periods = hk_data.loc[
+            (hk_data.type.isin(ACTIVITY_SAMPLE_TYPES)),
+            ["local_start", "local_end"],
+        ]
+        if context == 'non-sleep rest':
+            context_str = 'nonsleep-rest_'
+            # filter vital sign for those not between local_start and local_end for active_periods and sleep_periods
+            exclude_periods = pd.concat([active_periods, sleep_periods])
+            for _, row in exclude_periods.iterrows():
+                vital = vital.loc[
+                    ~((vital.local_start >= row.local_start) & (vital.local_start <= row.local_end))
+                ]
+        elif context == 'sleep':
+            context_str = 'sleep_'
+            # filter vital sign for those not between local_start and local_end for sleep_periods
+            vital['in_context'] = False
+            for _, row in sleep_periods.iterrows():
+                vital.loc[
+                    (vital.local_start >= row.local_start) & (vital.local_start <= row.local_end),
+                    'in_context'
+                ] = True
+            vital = vital[vital.in_context]
+
+        elif context == 'active':
+            context_str = 'active_'
+            vital['in_context'] = False
+            for _, row in active_periods.iterrows():
+                vital.loc[
+                    (vital.local_start >= row.local_start) & (vital.local_start <= row.local_end),
+                    'in_context'
+                ] = True
+            vital = vital[vital.in_context]
+
+
     if vital.empty:
         return pd.DataFrame()
     vital[vital_type] = vital[vital_type].astype(float)
@@ -817,9 +870,10 @@ def aggregateVital(
         vital = vital[
             vital[vital_type].between(vital_range[0], vital_range[1])
         ]
+
     vital_resamp = vital.set_index("local_start").resample(resample).median()
     vital_agg = pd.DataFrame(vital_resamp.aggregate(standard_aggregations)).T
-    vital_agg.columns = [f"{vital_type}_{col}" for col in vital_agg.columns]
+    vital_agg.columns = [f"{vital_type}_{context_str}{col}" for col in vital_agg.columns]
 
     # Add time domain features
     if linear_time_aggregations:
@@ -830,8 +884,8 @@ def aggregateVital(
             "1h"
         )
         regression = pg.linear_regression(time_hours, resamp_nona[vital_type])
-        vital_agg[f"{vital_type}_intercept"] = regression["coef"].values[0]
-        vital_agg[f"{vital_type}_slope"] = regression["coef"].values[1]
+        vital_agg[f"{vital_type}_{context_str}intercept"] = regression["coef"].values[0]
+        vital_agg[f"{vital_type}_{context_str}slope"] = regression["coef"].values[1]
     if circadian_model_aggregations:
         resamp_nona = vital_resamp.dropna()
         if resamp_nona.shape[0] < 3:
@@ -847,9 +901,9 @@ def aggregateVital(
             resamp_nona[vital_type],
         )
         params = model.parameters
-        vital_agg[f"{vital_type}_circadian_mesor"] = params[0]
-        vital_agg[f"{vital_type}_circadian_amplitude"] = params[1]
-        vital_agg[f"{vital_type}_circadian_acrophase"] = params[2]
-        vital_agg[f"{vital_type}_circadian_period"] = params[3]
+        vital_agg[f"{vital_type}_{context_str}circadian_mesor"] = params[0]
+        vital_agg[f"{vital_type}_{context_str}circadian_amplitude"] = params[1]
+        vital_agg[f"{vital_type}_{context_str}circadian_acrophase"] = params[2]
+        vital_agg[f"{vital_type}_{context_str}circadian_period"] = params[3]
 
     return vital_agg.reset_index(drop=True)

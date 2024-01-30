@@ -6,7 +6,7 @@ Time can be "day" or in quarter days with values "h0", "h6", "h12", "h18". Time 
 """
 import pandas as pd
 import numpy as np
-from typing import List, Tuple
+from typing import List, Literal, Tuple
 from .simple_features import (
     aggregateActiveDuration,
     aggregateAudioExposure,
@@ -137,12 +137,12 @@ def qcWatchDataDaily(data: pd.DataFrame, threshold: int = 18) -> pd.DataFrame:
 def aggregateVitalsDaily(
     data,
     vital_type,
-    quarter_day=True,
     standard_aggregations: List = ["mean", "median", "std", "min", "max"],
     resample="1h",
     linear_time_aggregations: bool = False,
     circadian_model_aggregations: bool = False,
     vital_range: Tuple[float, float] | None = None,
+    context: Literal['all', 'sleep', 'active', 'non-sleep rest'] = 'all',
 ) -> pd.DataFrame:
     vital = data[data["type"] == vital_type].copy()
     map_vital = {
@@ -171,6 +171,7 @@ def aggregateVitalsDaily(
             linear_time_aggregations=linear_time_aggregations,
             circadian_model_aggregations=circadian_model_aggregations,
             vital_range=vital_range,
+            context=context,
         )
     )
     vital_daily.columns = [c + "_day" for c in vital_daily.columns]

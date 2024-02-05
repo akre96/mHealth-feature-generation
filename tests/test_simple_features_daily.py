@@ -94,7 +94,6 @@ def test_aggregateVitalsDaily():
     agg = aggregateVitalsDaily(
         test_data,
         vital_type="HeartRate",
-        quarter_day=False,
         standard_aggregations=["mean", "min", "max"],
         linear_time_aggregations=True,
         circadian_model_aggregations=True,

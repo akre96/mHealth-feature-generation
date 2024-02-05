@@ -821,7 +821,7 @@ def aggregateVital(
     )
     context_str = ''
     if context != 'all':
-        sleep_periods= hk_data.loc[
+        sleep_periods = hk_data.loc[
             (hk_data.type == "SleepAnalysis") &
             (
                 hk_data.value.isin(ASLEEP_CATEGORIES) |
@@ -837,31 +837,30 @@ def aggregateVital(
             context_str = 'nonsleep-rest_'
             # filter vital sign for those not between local_start and local_end for active_periods and sleep_periods
             exclude_periods = pd.concat([active_periods, sleep_periods])
+            filt_vital = vital.copy()
             for _, row in exclude_periods.iterrows():
-                vital = vital.loc[
-                    ~((vital.local_start >= row.local_start) & (vital.local_start <= row.local_end))
+                filt_vital = filt_vital.loc[
+                    ~((filt_vital.local_start >= row.local_start) & (filt_vital.local_start <= row.local_end))
                 ]
-        elif context == 'sleep':
-            context_str = 'sleep_'
+            vital = filt_vital
+        elif context in ['sleep', 'active']:
+            context_str = f'{context}_'
+            periods_map = {
+                'sleep': sleep_periods,
+                'active': active_periods
+            }
+            rel_periods = periods_map[context]
             # filter vital sign for those not between local_start and local_end for sleep_periods
-            vital['in_context'] = False
-            for _, row in sleep_periods.iterrows():
-                vital.loc[
-                    (vital.local_start >= row.local_start) & (vital.local_start <= row.local_end),
-                    'in_context'
-                ] = True
-            vital = vital[vital.in_context]
-
-        elif context == 'active':
-            context_str = 'active_'
-            vital['in_context'] = False
-            for _, row in active_periods.iterrows():
-                vital.loc[
-                    (vital.local_start >= row.local_start) & (vital.local_start <= row.local_end),
-                    'in_context'
-                ] = True
-            vital = vital[vital.in_context]
-
+            in_context = []
+            for _, row in rel_periods.iterrows():
+                in_context.append(
+                    vital.loc[
+                        (vital.local_start >= row.local_start) & (vital.local_start <= row.local_end)
+                    ]
+                )
+            if len(in_context) == 0:
+                return pd.DataFrame()
+            vital = pd.concat(in_context)
 
     if vital.empty:
         return pd.DataFrame()

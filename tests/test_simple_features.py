@@ -35,6 +35,7 @@ def test_hr_context():
         context='non-sleep rest'
     )
     print(nonsleep_rest_hr)
+    assert nonsleep_rest_hr.shape[0] == 1
     assert nonsleep_rest_hr['HeartRate_nonsleep-rest_count'].values[0] == 1
     assert nonsleep_rest_hr['HeartRate_nonsleep-rest_mean'].values[0] == 75
 
@@ -49,6 +50,7 @@ def test_hr_context():
         context='active'
     )
     print(active_hr)
+    assert active_hr.shape[0] == 1
     assert active_hr['HeartRate_active_mean'].values[0] == 100
     assert active_hr['HeartRate_active_count'].values[0] == 1
 
@@ -63,5 +65,6 @@ def test_hr_context():
         context='sleep'
     )
     print(sleep_hr)
+    assert sleep_hr.shape[0] == 1
     assert sleep_hr['HeartRate_sleep_mean'].values[0] == 40
     assert sleep_hr['HeartRate_sleep_count'].values[0] == 1

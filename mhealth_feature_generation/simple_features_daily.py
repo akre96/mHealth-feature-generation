@@ -157,7 +157,7 @@ def aggregateVitalsDaily(
         return pd.DataFrame(columns=["user_id", "date"])
 
     # vital = vital.set_index('time')
-    vital_daily = vital.groupby(
+    vital_daily = data.groupby(
         [
             "user_id",
             pd.Grouper(key="local_start", freq="1D", origin="start_day"),

@@ -698,9 +698,10 @@ def aggregateSleepCategories(
         for col in s2.columns
         if col.endswith("sum") or col.endswith("mean")
     ]
-    s2[duration_cols] = s2[duration_cols].map(
-        lambda x: pd.Timedelta(x) / pd.Timedelta("1h")
-    )
+    for c in duration_cols:
+        s2[c] = s2[c].map(
+            lambda x: pd.Timedelta(x) / pd.Timedelta("1h")
+        )
     if qc:
         s2 = qcSleepFeatures(s2)
     return s2
@@ -828,11 +829,11 @@ def aggregateVital(
                 hk_data.value.isin(IN_BED_CATEGORIES)
             ),
             ["local_start", "local_end"],
-        ]
+        ].drop_duplicates()
         active_periods = hk_data.loc[
             (hk_data.type.isin(ACTIVITY_SAMPLE_TYPES)),
             ["local_start", "local_end"],
-        ]
+        ].drop_duplicates()
         if context == 'non-sleep rest':
             context_str = 'nonsleep-rest_'
             # filter vital sign for those not between local_start and local_end for active_periods and sleep_periods
@@ -859,8 +860,9 @@ def aggregateVital(
                     ]
                 )
             if len(in_context) == 0:
-                return pd.DataFrame()
-            vital = pd.concat(in_context)
+                vital = pd.DataFrame()
+            else:
+                vital = pd.concat(in_context)
 
     if vital.empty:
         return pd.DataFrame()

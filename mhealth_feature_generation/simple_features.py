@@ -69,25 +69,40 @@ def collectFeatures(
     paee = aggregateActiveDuration(subset, "ActiveEnergyBurned")
     exercise_time = aggregateActiveDuration(subset, "AppleExerciseTime")
     steps = aggregateActiveDuration(subset, "StepCount")
-    hr = aggregateVital(subset, "HeartRate", resample="1h", range=(30, 200))
-    hrv = aggregateVital(
-        subset,
+    vitals = []
+    vital_types = [
+        "HeartRate",
         "HeartRateVariabilitySDNN",
-        resample="1h",
-        aggregations=["mean", "count"],
-    )
-    o2sat = aggregateVital(
-        subset,
+        "RespiratoryRate",
         "OxygenSaturation",
-        resample="1h",
-        aggregations=["mean", "count"],
-    )
-    rr = aggregateVital(subset, "RespiratoryRate", resample="1h")
+    ]
+    for context in ['non-sleep rest', 'sleep', 'active', 'all']:
+        for vital_type in vital_types:
+            vital = aggregateVital(
+                subset,
+                vital_type,
+                resample="1h",
+                standard_aggregations = [
+                    "mean",
+                    "std",
+                    "min",
+                    "max",
+                    "count",
+                    "median",
+                    "skew",
+                    "kurtosis",
+                ],
+                linear_time_aggregations=True,
+                circadian_model_aggregations=True,
+                context=context,
+            )
+            vitals.append(vital)
     standing = countEventLog(subset, ["AppleStandHour"])
     sleep = aggregateSleepCategories(subset)
+    noise = aggregateAudioExposure(subset)
 
     features = pd.concat(
-        [sleep, paee, hr, hrv, rr, o2sat, standing, exercise_time, steps],
+        [sleep, paee, *vitals, standing, exercise_time, steps, noise],
         axis=1,
     )
     start, _ = calcStartStop(timestamp, duration)

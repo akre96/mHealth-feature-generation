@@ -4,6 +4,7 @@ Allows aggregation of features over a defined time period
 
 """
 
+from re import A
 import pandas as pd
 import numpy as np
 from typing import List, Tuple, Literal
@@ -44,6 +45,7 @@ ACTIVITY_SAMPLE_TYPES = [
     "StepCount",
     "AppleExerciseTime",
     "ActiveEnergyBurned",
+    "BasalEnergyBurned"
 ]
 
 def collectFeatures(
@@ -67,6 +69,7 @@ def collectFeatures(
     subset = getDurationAroundTimestamp(hk_data, user_id, timestamp, duration)
     n_dates = subset["local_start"].dt.date.nunique()
     paee = aggregateActiveDuration(subset, "ActiveEnergyBurned")
+    bee = aggregateActiveDuration(subset, "BasalEnergyBurned")
     exercise_time = aggregateActiveDuration(subset, "AppleExerciseTime")
     steps = aggregateActiveDuration(subset, "StepCount")
     vitals = []
@@ -579,12 +582,15 @@ def qcActivity(data: pd.DataFrame) -> pd.DataFrame:
     if len(types) > 1:
         print("ERROR: Activity data has multiple types", len(types), types)
         return data
-    if "ActiveEnergyBurned" in types:
+    if types[0] not in ACTIVITY_SAMPLE_TYPES:
+        raise ValueError("ERROR: Activity data has invalid type", types[0])
+
+    if "EnergyBurned" in types[0]:
         data["activity_mins"] = (
             data["local_end"] - data["local_start"]
         ).dt.seconds / 60
-        data.loc[data["activity_mins"] == 0, "value"] = np.nan
-        data.loc[data["activity_mins"] == 0, "activity_mins"] = np.nan
+        data.loc[data["activity_mins"] <= 0, "value"] = np.nan
+        data.loc[data["activity_mins"] <= 0, "activity_mins"] = np.nan
         data["kcal_per_min"] = (
             data["value"].astype(float)
             / data["activity_mins"].astype(float)
@@ -593,6 +599,8 @@ def qcActivity(data: pd.DataFrame) -> pd.DataFrame:
         data.loc[data["kcal_per_min"] < 0, "value"] = np.nan
         data.loc[data["kcal_per_min"] > 30, "value"] = np.nan
         data = data.drop(columns=["activity_mins", "kcal_per_min"])
+    else:
+        data.loc[data["value"] <= 0, "value"] = np.nan
     return data
 
 

@@ -230,12 +230,13 @@ class DataLoader:
 
     # Function to get all OPTIMA studyhealthkit data
     def loadOPTIMAParticipantData(
-        self, data_folder: Path, user_id: int
+        self, data_folder: Path, user_id: int, sensor_folders: list[str] = []
     ) -> pd.DataFrame:
         hk_data_list = []
-        sensor_folders = [
-            f for f in data_folder.expanduser().iterdir() if f.is_dir()
-        ]
+        if not sensor_folders:
+            sensor_folders = [
+                f for f in data_folder.expanduser().iterdir() if f.is_dir()
+            ]
         for sensor_folder in sensor_folders:
             sensor_path = Path(
                 sensor_folder, f"{int(user_id)}-{sensor_folder.name}.csv"

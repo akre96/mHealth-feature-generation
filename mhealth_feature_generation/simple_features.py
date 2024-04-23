@@ -589,15 +589,18 @@ def qcActivity(data: pd.DataFrame) -> pd.DataFrame:
         data["activity_mins"] = (
             data["local_end"] - data["local_start"]
         ).dt.seconds / 60
+        # Convert joule to kcal
+        data['value'] = data['value'].astype(float) / 4184
         data.loc[data["activity_mins"] <= 0, "value"] = np.nan
         data.loc[data["activity_mins"] <= 0, "activity_mins"] = np.nan
         data["kcal_per_min"] = (
             data["value"].astype(float)
             / data["activity_mins"].astype(float)
-            / 1000
         )
         data.loc[data["kcal_per_min"] < 0, "value"] = np.nan
-        data.loc[data["kcal_per_min"] > 30, "value"] = np.nan
+        # set value to 30kcal per min result if over 30kcal per min
+        high_kcal_ind = data["kcal_per_min"] > 30
+        data.loc[high_kcal_ind, "value"] = 30 * data.loc[high_kcal_ind, "activity_mins"]
         data = data.drop(columns=["activity_mins", "kcal_per_min"])
     else:
         data.loc[data["value"] <= 0, "value"] = np.nan
@@ -767,7 +770,7 @@ def aggregateActiveDuration(
 
     activity["value"] = activity["value"].astype(float)
     if qc:
-        activity = qcActivity(activity)
+        activity = qcActivity(activity).dropna(subset='value').drop_duplicates()
 
     # Combine overlapping values
     activity = combineOverlaps(activity, "value").rename(
@@ -854,7 +857,7 @@ def aggregateVital(
             ["local_start", "local_end"],
         ].drop_duplicates()
         active_periods = hk_data.loc[
-            (hk_data.type.isin(ACTIVITY_SAMPLE_TYPES)),
+            (hk_data.type == 'AppleExerciseTime'),
             ["local_start", "local_end"],
         ].drop_duplicates()
         if context == 'non-sleep rest':

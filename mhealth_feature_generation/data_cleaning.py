@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 
 def combineOverlaps(
@@ -17,8 +18,7 @@ def combineOverlaps(
             keep="last",
         )
         .sort_values(by="local_start")
-        .reset_index()
-    )
+    ).reset_index(drop=True)
     activity["prev_local_end"] = activity["local_end"].shift()
     activity["duration"] = (
         activity["local_end"] - activity["local_start"]
@@ -27,11 +27,18 @@ def combineOverlaps(
     activity["overlap"] = (
         activity["local_start"] < activity["prev_local_end"]
     ) & (activity["local_end"] > activity["prev_local_start"])
+    # Drop if local_end before prev_local_end
+    activity.loc[
+        activity.overlap & (activity.local_end < activity.prev_local_end), value_col
+    ] = np.nan
     has_overlap = activity[activity.overlap].index
 
     # Combines values using time weighting
     for overlap_ind in has_overlap:
+
         overlap_rows = activity.loc[[overlap_ind - 1, overlap_ind], :]
+        if overlap_rows[value_col].isna().any():
+            continue
         total_time = (
             overlap_rows["local_end"].max() - overlap_rows["local_start"].min()
         ) / pd.Timedelta("1m")
@@ -42,13 +49,17 @@ def combineOverlaps(
         activity.loc[overlap_ind, "local_start"] = overlap_rows[
             "local_start"
         ].min()
-        activity.drop(overlap_ind - 1, inplace=True)
+        activity.loc[overlap_ind, "local_end"] = overlap_rows[
+            "local_end"
+        ].max()
+        activity.loc[overlap_ind, "duration"] = total_time
+        activity.loc[overlap_ind - 1, value_col] = np.nan
 
     activity.drop(
         columns=["prev_local_end", "prev_local_start", "overlap"],
         inplace=True,
     )
-    return activity
+    return activity.dropna(subset=[value_col])
 
 
 def combineOverlapsSleep(

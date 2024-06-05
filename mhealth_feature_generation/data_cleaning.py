@@ -1,3 +1,13 @@
+"""
+This file contains functions for data cleaning and manipulation related
+to user health data.
+
+Functions:
+- combineOverlaps: Combines overlapping activities in the user_hk_data
+    DataFrame based on the specified value column.
+- combineOverlapsSleep: Combines and splits overlapping sleep durations
+    in the given user health data.
+"""
 import pandas as pd
 import numpy as np
 
@@ -5,6 +15,17 @@ import numpy as np
 def combineOverlaps(
     user_hk_data: pd.DataFrame, value_col: str
 ) -> pd.DataFrame:
+    """
+    Combines overlapping activities in the user_hk_data DataFrame based on the specified value column.
+
+    Args:
+        user_hk_data (pd.DataFrame): The DataFrame containing the user's activity data.
+        value_col (str): The name of the column representing the values to be combined.
+
+    Returns:
+        pd.DataFrame: The DataFrame with overlapping activities combined and NaN values dropped.
+
+    """
     activity = (
         user_hk_data.copy()
         .drop_duplicates(
@@ -29,13 +50,13 @@ def combineOverlaps(
     ) & (activity["local_end"] > activity["prev_local_start"])
     # Drop if local_end before prev_local_end
     activity.loc[
-        activity.overlap & (activity.local_end < activity.prev_local_end), value_col
+        activity.overlap & (activity.local_end < activity.prev_local_end),
+        value_col,
     ] = np.nan
     has_overlap = activity[activity.overlap].index
 
     # Combines values using time weighting
     for overlap_ind in has_overlap:
-
         overlap_rows = activity.loc[[overlap_ind - 1, overlap_ind], :]
         if overlap_rows[value_col].isna().any():
             continue
@@ -65,6 +86,18 @@ def combineOverlaps(
 def combineOverlapsSleep(
     user_hk_data: pd.DataFrame, value_col: str
 ) -> pd.DataFrame:
+    """
+    Combines and splits overlapping sleep durations in the given user health data.
+
+    Args:
+        user_hk_data (pd.DataFrame): The user health data containing sleep durations.
+        value_col (str): The name of the column in the user health data that contains sleep values.
+
+    Returns:
+        pd.DataFrame: The modified user health data with combined and split sleep durations.
+
+    """
+    # Function code goes here
     in_bed = [
         "InBed",
         "Asleep",

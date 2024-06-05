@@ -82,7 +82,7 @@ def test_aggregateActiveDaily():
         ]
     )
     assert agg.shape[0] == 1
-    assert agg.ActiveEnergyBurned_sum.values[0] == (150/4184)
+    assert agg.ActiveEnergyBurned_sum.values[0] == (150 / 4184)
     assert agg.ActiveEnergyBurned_count.values[0] == 1
     assert agg.ActiveEnergyBurned_duration.values[0] == 1.5
 

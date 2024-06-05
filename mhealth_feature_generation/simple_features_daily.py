@@ -142,7 +142,7 @@ def aggregateVitalsDaily(
     linear_time_aggregations: bool = False,
     circadian_model_aggregations: bool = False,
     vital_range: Tuple[float, float] | None = None,
-    context: Literal['all', 'sleep', 'active', 'non-sleep rest'] = 'all',
+    context: Literal["all", "sleep", "active", "non-sleep rest"] = "all",
 ) -> pd.DataFrame:
     vital = data[data["type"] == vital_type].copy()
     map_vital = {

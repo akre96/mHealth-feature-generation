@@ -45,8 +45,9 @@ ACTIVITY_SAMPLE_TYPES = [
     "StepCount",
     "AppleExerciseTime",
     "ActiveEnergyBurned",
-    "BasalEnergyBurned"
+    "BasalEnergyBurned",
 ]
+
 
 def collectFeatures(
     hk_data: pd.DataFrame,
@@ -79,13 +80,13 @@ def collectFeatures(
         "RespiratoryRate",
         "OxygenSaturation",
     ]
-    for context in ['non-sleep rest', 'bedrest', 'active', 'all']:
+    for context in ["non-sleep rest", "bedrest", "active", "all"]:
         for vital_type in vital_types:
             vital = aggregateVital(
                 subset,
                 vital_type,
                 resample="1h",
-                standard_aggregations = [
+                standard_aggregations=[
                     "mean",
                     "std",
                     "min",
@@ -577,14 +578,20 @@ def qcSleepFeatures(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def qcActivity(data: pd.DataFrame, ) -> pd.DataFrame:
+def qcActivity(
+    data: pd.DataFrame,
+) -> pd.DataFrame:
     if data.empty:
         return data
     types = data["type"].unique()
     # Remove duplicates
-    data = data.drop_duplicates(subset=["local_start", "local_end", "value"]).copy()
+    data = data.drop_duplicates(
+        subset=["local_start", "local_end", "value"]
+    ).copy()
     if len(types) != 1:
-        print("ERROR: Activity data has no or multiple types", len(types), types)
+        print(
+            "ERROR: Activity data has no or multiple types", len(types), types
+        )
         return data
     if types[0] not in ACTIVITY_SAMPLE_TYPES:
         raise ValueError("ERROR: Activity data has invalid type", types[0])
@@ -595,10 +602,9 @@ def qcActivity(data: pd.DataFrame, ) -> pd.DataFrame:
         ).dt.seconds / 60
         # Convert joule to kcal
         data.loc[data["activity_mins"] <= 0, "value"] = np.nan
-        data["kcal_per_min"] = (
-            data["value"].astype(float)
-            / data["activity_mins"].astype(float)
-        )
+        data["kcal_per_min"] = data["value"].astype(float) / data[
+            "activity_mins"
+        ].astype(float)
         data.loc[data["kcal_per_min"] < 0, "value"] = np.nan
         # set value to NaN if over 30kcal per min
         high_kcal_ind = data["kcal_per_min"] > 30
@@ -612,7 +618,7 @@ def qcActivity(data: pd.DataFrame, ) -> pd.DataFrame:
 def aggregateAudioExposure(
     hk_data: pd.DataFrame,
     resample: str = "1h",
-    context: Literal['bedrest', 'sleep', 'all'] = 'all'
+    context: Literal["bedrest", "sleep", "all"] = "all",
 ) -> pd.DataFrame:
     audio_data = hk_data[hk_data.type == "EnvironmentalAudioExposure"].copy()
     audio_data["value"] = audio_data["value"].astype(float)
@@ -620,39 +626,36 @@ def aggregateAudioExposure(
     overlap_combined["duration"] = (
         overlap_combined["local_end"] - overlap_combined["local_start"]
     )
-    context_str = ''
-    if context != 'all':
-        if context == 'bedrest':
+    context_str = ""
+    if context != "all":
+        if context == "bedrest":
             use_periods = hk_data.loc[
-                (hk_data.type == "SleepAnalysis") &
-                (
-                    hk_data.value.isin(IN_BED_CATEGORIES)
-                ),
+                (hk_data.type == "SleepAnalysis")
+                & (hk_data.value.isin(IN_BED_CATEGORIES)),
                 ["local_start", "local_end"],
             ].drop_duplicates()
-        elif context == 'sleep':
+        elif context == "sleep":
             use_periods = hk_data.loc[
-                (hk_data.type == "SleepAnalysis") &
-                (
-                    hk_data.value.isin(ASLEEP_CATEGORIES)
-                ),
+                (hk_data.type == "SleepAnalysis")
+                & (hk_data.value.isin(ASLEEP_CATEGORIES)),
                 ["local_start", "local_end"],
             ].drop_duplicates()
         else:
             raise ValueError(f"Invalid context: {context}")
-        
+
         in_context = []
         for _, row in use_periods.iterrows():
             in_context.append(
                 overlap_combined.loc[
-                    (overlap_combined.local_start >= row.local_start) & (overlap_combined.local_start <= row.local_end)
+                    (overlap_combined.local_start >= row.local_start)
+                    & (overlap_combined.local_start <= row.local_end)
                 ]
             )
         if len(in_context) == 0:
             return pd.DataFrame()
         overlap_combined = pd.concat(in_context)
-        context_str = f'{context}_'
-        
+        context_str = f"{context}_"
+
     resamp = (
         overlap_combined.set_index("local_start")[
             ["body.quantity.count", "duration", "value"]
@@ -677,9 +680,9 @@ def aggregateAudioExposure(
         }
     )
     agg[f"{context_str}audioExposure_entries"] = resamp.value.count()
-    agg[f"{context_str}audioExposure_hours"] = agg[f"{context_str}audioExposure_hours"] / pd.Timedelta(
-        "1h"
-    )
+    agg[f"{context_str}audioExposure_hours"] = agg[
+        f"{context_str}audioExposure_hours"
+    ] / pd.Timedelta("1h")
     return agg
 
 
@@ -700,7 +703,12 @@ def aggregateDailySleep(
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            sleep_agg = sleep_daily[sleep_features].dropna(how='all').aggregate(aggs).unstack()
+            sleep_agg = (
+                sleep_daily[sleep_features]
+                .dropna(how="all")
+                .aggregate(aggs)
+                .unstack()
+            )
 
     sleep_agg[("sleep_sleep_day", "count")] = sleep_daily[
         "sleep_sleepDuration_day"
@@ -765,9 +773,7 @@ def aggregateSleepCategories(
         if col.endswith("sum") or col.endswith("mean")
     ]
     for c in duration_cols:
-        s2[c] = s2[c].map(
-            lambda x: pd.Timedelta(x) / pd.Timedelta("1h")
-        )
+        s2[c] = s2[c].map(lambda x: pd.Timedelta(x) / pd.Timedelta("1h"))
     if qc:
         s2 = qcSleepFeatures(s2)
     return s2
@@ -796,27 +802,38 @@ def aggregateActiveDuration(
     device: str = "Apple Watch",
     aggregations: List[str] = ["sum", "mean", "count"],
     resample: None | str = "1h",
-    value_per_kcal: float = 4184
+    value_per_kcal: float = 4184,
 ) -> pd.DataFrame:
-    if hk_type not in ["StepCount", "AppleExerciseTime", "ActiveEnergyBurned", "BasalEnergyBurned"]:
+    if hk_type not in [
+        "StepCount",
+        "AppleExerciseTime",
+        "ActiveEnergyBurned",
+        "BasalEnergyBurned",
+    ]:
         raise ValueError(
             f"Invalid hk_type: {hk_type}, must be ActiveEnergyBurned, BasalEnergyBurned, StepCount or AppleExerciseTime"
         )
 
-    activity = hk_data.loc[
-        (hk_data.type == hk_type)
-        & (hk_data["device.name"] == device)
-        & (hk_data["body.quantity.count"] == 1),
-        ["local_start", "local_end", "value", "type", "user_id"],
-    ].sort_values(by="local_start").drop_duplicates()
+    activity = (
+        hk_data.loc[
+            (hk_data.type == hk_type)
+            & (hk_data["device.name"] == device)
+            & (hk_data["body.quantity.count"] == 1),
+            ["local_start", "local_end", "value", "type", "user_id"],
+        ]
+        .sort_values(by="local_start")
+        .drop_duplicates()
+    )
 
     activity["value"] = activity["value"].astype(float)
     # Convert joule to kcal
-    if 'EnergyBurned' in hk_type:
-        activity['value'] = activity['value'] / value_per_kcal
+    if "EnergyBurned" in hk_type:
+        activity["value"] = activity["value"] / value_per_kcal
 
     if qc:
-        activity = qcActivity(activity).dropna(subset='value').drop_duplicates()
+        activity = (
+            qcActivity(activity).dropna(subset="value").drop_duplicates()
+        )
 
     # Combine overlapping values
     activity = combineOverlaps(activity, "value").rename(
@@ -835,9 +852,7 @@ def aggregateActiveDuration(
         pd.to_timedelta(activity["duration"]) > pd.Timedelta(0)
     ]
 
-    activity_agg = pd.DataFrame(
-        activity[hk_type].aggregate(aggregations)
-    ).T
+    activity_agg = pd.DataFrame(activity[hk_type].aggregate(aggregations)).T
     activity_agg.columns = [f"{hk_type}_{col}" for col in activity_agg.columns]
     activity_agg[f"{hk_type}_duration"] = pd.to_timedelta(
         activity["duration"].sum()
@@ -873,7 +888,9 @@ def aggregateVital(
     linear_time_aggregations: bool = True,
     circadian_model_aggregations: bool = False,
     vital_range: Tuple[float, float] | None = None,
-    context: Literal['non-sleep rest', 'sleep', 'active', 'all', 'bedrest'] = 'all'
+    context: Literal[
+        "non-sleep rest", "sleep", "active", "all", "bedrest"
+    ] = "all",
 ) -> pd.DataFrame:
     if vital_type not in [
         "HeartRate",
@@ -890,36 +907,39 @@ def aggregateVital(
         .rename(columns={"value": vital_type})
         .drop_duplicates()
     )
-    context_str = ''
-    if context != 'all':
+    context_str = ""
+    if context != "all":
         sleep_periods = hk_data.loc[
-            (hk_data.type == "SleepAnalysis") &
-            (
-                hk_data.value.isin(ASLEEP_CATEGORIES) |
-                hk_data.value.isin(IN_BED_CATEGORIES)
+            (hk_data.type == "SleepAnalysis")
+            & (
+                hk_data.value.isin(ASLEEP_CATEGORIES)
+                | hk_data.value.isin(IN_BED_CATEGORIES)
             ),
             ["local_start", "local_end"],
         ].drop_duplicates()
         active_periods = hk_data.loc[
-            (hk_data.type == 'AppleExerciseTime'),
+            (hk_data.type == "AppleExerciseTime"),
             ["local_start", "local_end"],
         ].drop_duplicates()
-        if context == 'non-sleep rest':
-            context_str = 'nonsleep-rest_'
+        if context == "non-sleep rest":
+            context_str = "nonsleep-rest_"
             # filter vital sign for those not between local_start and local_end for active_periods and sleep_periods
             exclude_periods = pd.concat([active_periods, sleep_periods])
             filt_vital = vital.copy()
             for _, row in exclude_periods.iterrows():
                 filt_vital = filt_vital.loc[
-                    ~((filt_vital.local_start >= row.local_start) & (filt_vital.local_start <= row.local_end))
+                    ~(
+                        (filt_vital.local_start >= row.local_start)
+                        & (filt_vital.local_start <= row.local_end)
+                    )
                 ]
             vital = filt_vital
-        elif context in ['sleep', 'active', 'bedrest']:
-            context_str = f'{context}_'
+        elif context in ["sleep", "active", "bedrest"]:
+            context_str = f"{context}_"
             periods_map = {
-                'sleep': sleep_periods,
-                'bedrest': sleep_periods,
-                'active': active_periods
+                "sleep": sleep_periods,
+                "bedrest": sleep_periods,
+                "active": active_periods,
             }
             rel_periods = periods_map[context]
             # filter vital sign for those not between local_start and local_end for sleep_periods
@@ -927,7 +947,8 @@ def aggregateVital(
             for _, row in rel_periods.iterrows():
                 in_context.append(
                     vital.loc[
-                        (vital.local_start >= row.local_start) & (vital.local_start <= row.local_end)
+                        (vital.local_start >= row.local_start)
+                        & (vital.local_start <= row.local_end)
                     ]
                 )
             if len(in_context) == 0:
@@ -945,7 +966,9 @@ def aggregateVital(
 
     vital_resamp = vital.set_index("local_start").resample(resample).median()
     vital_agg = pd.DataFrame(vital_resamp.aggregate(standard_aggregations)).T
-    vital_agg.columns = [f"{vital_type}_{context_str}{col}" for col in vital_agg.columns]
+    vital_agg.columns = [
+        f"{vital_type}_{context_str}{col}" for col in vital_agg.columns
+    ]
 
     # Add time domain features
     if linear_time_aggregations:
@@ -956,8 +979,12 @@ def aggregateVital(
             "1h"
         )
         regression = pg.linear_regression(time_hours, resamp_nona[vital_type])
-        vital_agg[f"{vital_type}_{context_str}intercept"] = regression["coef"].values[0]
-        vital_agg[f"{vital_type}_{context_str}slope"] = regression["coef"].values[1]
+        vital_agg[f"{vital_type}_{context_str}intercept"] = regression[
+            "coef"
+        ].values[0]
+        vital_agg[f"{vital_type}_{context_str}slope"] = regression[
+            "coef"
+        ].values[1]
     if circadian_model_aggregations:
         resamp_nona = vital_resamp.dropna()
         if resamp_nona.shape[0] < 3:

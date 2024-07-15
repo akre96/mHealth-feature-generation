@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "mhealth_feature_generation"}]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.10"
 tqdm = "^4.65.0"
 pingouin = "^0.5.3"
 openpyxl = "^3.1.2"

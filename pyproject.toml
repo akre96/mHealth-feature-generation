@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "mhealth-feature-generation"
-version = "0.1.1"
-description = ""
+version = "0.1.2"
+description = "Create features from Apple HealthKit data for a duration prior to a given timestamp"
 authors = ["Samir Akre <sakre@g.ucla.edu>"]
 readme = "README.md"
 packages = [{include = "mhealth_feature_generation"}]
@@ -14,7 +14,6 @@ openpyxl = "^3.1.2"
 numpy = "^1.26.0"
 pandas = "^2.1.1"
 p-tqdm = "^1.4.0"
-pynufft = "^2024.1.2"
 
 
 [tool.poetry.group.dev.dependencies]

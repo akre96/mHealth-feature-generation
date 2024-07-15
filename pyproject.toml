@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "mhealth-feature-generation"
+version = "0.1.2"
+description = "Create features from Apple HealthKit data for a duration prior to a given timestamp"
+authors = ["Samir Akre <sakre@g.ucla.edu>"]
+readme = "README.md"
+packages = [{include = "mhealth_feature_generation"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+tqdm = "^4.65.0"
+pingouin = "^0.5.3"
+openpyxl = "^3.1.2"
+numpy = "^1.26.0"
+pandas = "^2.1.1"
+p-tqdm = "^1.4.0"
+
+
+[tool.poetry.group.dev.dependencies]
+jupyter = "^1.0.0"
+black = "^23.3.0"
+seaborn = "^0.12.2"
+matplotlib = "^3.7.1"
+pytest = "^7.4.0"
+
+[tool.black]
+line-length = 79
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

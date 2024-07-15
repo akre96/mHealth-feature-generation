@@ -8,6 +8,7 @@ Functions:
 - combineOverlapsSleep: Combines and splits overlapping sleep durations
     in the given user health data.
 """
+
 import pandas as pd
 import numpy as np
 
@@ -55,7 +56,7 @@ def combineOverlaps(
     ] = np.nan
     has_overlap = activity[activity.overlap].index
 
-    # Combines values using time weighting
+    # Combines values of overlapping activities
     for overlap_ind in has_overlap:
         overlap_rows = activity.loc[[overlap_ind - 1, overlap_ind], :]
         if overlap_rows[value_col].isna().any():
@@ -63,6 +64,7 @@ def combineOverlaps(
         total_time = (
             overlap_rows["local_end"].max() - overlap_rows["local_start"].min()
         ) / pd.Timedelta("1m")
+        # Weighted average
         weighted_value = total_time * (
             overlap_rows[value_col].sum() / overlap_rows["duration"].sum()
         )

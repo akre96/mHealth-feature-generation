@@ -19,7 +19,8 @@ except ModuleNotFoundError:
     from .data_cleaning import combineOverlaps
     from .data_cleaning import combineOverlapsSleep
 
-durationType = pd.Timedelta | Literal["today", "yesterday"] | str
+from .utils import durationType
+
 
 IN_BED_CATEGORIES = [
     "InBed",
@@ -47,91 +48,6 @@ ACTIVITY_SAMPLE_TYPES = [
     "ActiveEnergyBurned",
     "BasalEnergyBurned",
 ]
-
-
-def collectFeatures(
-    hk_data: pd.DataFrame,
-    user_id: int,
-    timestamp: pd.Timestamp,
-    duration: durationType,
-    watch_on_resample: str = "1h",
-) -> pd.DataFrame:
-    """Gather health kit data features for a user_id around a timestamp
-
-    Args:
-        hk_data (pd.DataFrame): Loaded Apple Health data
-        user_id (int): user ID
-        timestamp (pd.Timestamp): timestamp to center data around
-        duration (pd.Timedelta): duration to collect data before timestamp
-
-    Returns:
-        pd.DataFrame: features for user_id around timestamp, 1 row
-    """
-    subset = getDurationAroundTimestamp(hk_data, user_id, timestamp, duration)
-    n_dates = subset["local_start"].dt.date.nunique()
-    paee = aggregateActiveDuration(subset, "ActiveEnergyBurned")
-    bee = aggregateActiveDuration(subset, "BasalEnergyBurned")
-    exercise_time = aggregateActiveDuration(subset, "AppleExerciseTime")
-    steps = aggregateActiveDuration(subset, "StepCount")
-    vitals = []
-    vital_types = [
-        "HeartRate",
-        "HeartRateVariabilitySDNN",
-        "RespiratoryRate",
-        "OxygenSaturation",
-    ]
-    for context in ["non-sleep rest", "bedrest", "active", "all"]:
-        for vital_type in vital_types:
-            vital = aggregateVital(
-                subset,
-                vital_type,
-                resample="1h",
-                standard_aggregations=[
-                    "mean",
-                    "std",
-                    "min",
-                    "max",
-                    "count",
-                    "median",
-                    "skew",
-                    "kurtosis",
-                ],
-                linear_time_aggregations=True,
-                circadian_model_aggregations=True,
-                context=context,
-            )
-            vitals.append(vital)
-    standing = countEventLog(subset, ["AppleStandHour"])
-    sleep = aggregateSleepCategories(subset)
-    noise = aggregateAudioExposure(subset)
-
-    features = pd.concat(
-        [sleep, paee, bee, *vitals, standing, exercise_time, steps, noise],
-        axis=1,
-    )
-    start, _ = calcStartStop(timestamp, duration)
-
-    # Look to see if watch on in last hour for calculating if watch is on for duration < 1hour
-    if (type(duration) != str) and (duration < pd.Timedelta("1h")):
-        watch_on_subset = getDurationAroundTimestamp(
-            hk_data, user_id, timestamp, pd.Timedelta("1h")
-        )
-        features["watch_on_percent"] = processWatchOnPercent(
-            watch_on_subset,
-            resample=watch_on_resample,
-            origin=start,
-            end=timestamp,
-        )
-    else:
-        # TODO: Confirm that this calculates from start of duration to end of duration
-        features["watch_on_percent"] = processWatchOnPercent(
-            subset, resample=watch_on_resample, origin=start, end=timestamp
-        )
-    features["user_id"] = user_id
-    features["timestamp"] = timestamp
-    features["duration"] = duration
-    features["n_days"] = n_dates
-    return features
 
 
 def qcWatchData(
@@ -280,7 +196,7 @@ def processWatchOnPercent(
         .count()
     )
     total_size = pd.date_range(origin, end, freq=resample).shape[0]
-    if watch_hr.empty:
+    if watch_hr.empty or (total_size == 0):
         return 0
     return (
         100 * watch_hr_logs[watch_hr_logs["value"] > 0].shape[0] / total_size
@@ -460,7 +376,7 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc: bool = True) -> pd.DataFrame:
             "sleepOffset",
         ]
 
-        sleep_hr, sleep_hrv, sleep_noise = [], [], []
+        sleep_hr, sleep_hrv, bedrest_noise = [], [], []
         for i, row in sleep_agg.iterrows():
             sleep_hr.append(
                 hr[
@@ -474,17 +390,17 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc: bool = True) -> pd.DataFrame:
                     & (hrv.local_start <= row.sleepOffset)
                 ]["value"].median()
             )
-            sleep_noise.append(
+            bedrest_noise.append(
                 noise[
-                    (noise.local_start >= row.sleepOnset)
-                    & (noise.local_start <= row.sleepOffset)
+                    (noise.local_start >= row.bedrestOnset)
+                    & (noise.local_start <= row.bedrestOffset)
                 ]["value"].median()
             )
         # Starting at 3pm offsets the hour by 15 hours from prior midnight
         hours_offset = 15
         sleep_agg["sleepHR"] = sleep_hr
         sleep_agg["sleepHRV"] = sleep_hrv
-        sleep_agg["sleepNoise"] = sleep_noise
+        sleep_agg["bedrestNoise"] = bedrest_noise
 
         # Convert durations to hours
         sleep_agg["bedrestDuration"] = (

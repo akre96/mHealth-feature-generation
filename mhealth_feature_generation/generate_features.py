@@ -1,4 +1,31 @@
 # Wrapper function for feature generation
+"""
+Generate HealthKit features for a given user within a specified duration around a timestamp.
+
+Parameters:
+user_hk (DataFrame): The HealthKit data for the user.
+user_id (str): The unique identifier for the user.
+timestamp (datetime): The reference timestamp around which features are generated.
+duration (durationType): The duration around the timestamp for which features are generated.
+
+Returns:
+DataFrame: A DataFrame containing the generated features.
+
+The function performs the following steps:
+1. Extracts data around the given timestamp and duration.
+2. Aggregates various sleep-related features.
+3. Aggregates active duration features for specified types.
+4. Aggregates audio exposure features for different contexts.
+5. Aggregates vital signs features for specified types and contexts.
+6. Computes Lomb-Scargle features for vital signs.
+7. Concatenates all aggregated features into a single DataFrame.
+8. Adds quality control (QC) information to the DataFrame.
+9. Adds user and survey metadata to the DataFrame.
+
+Note:
+- If the extracted data is empty, an empty DataFrame is returned.
+- A warning is printed if the end of the window does not match the end of the data.
+"""
 import pandas as pd
 import numpy as np
 
@@ -15,8 +42,6 @@ from .simple_features import (
 )
 from .timedomain_features import (
     getLombScargleFeatures,
-    calculateLombScargle,
-    getFrequencies,
 )
 from .utils import durationType
 

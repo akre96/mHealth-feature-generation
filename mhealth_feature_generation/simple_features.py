@@ -1,7 +1,6 @@
-""" Preprocessing steps for Apple Health data
-Requires HealthKit data from Cassandra to be cleaned / wide format
-Allows aggregation of features over a defined time period
-
+"""
+This module provides functions for processing and analyzing health data, 
+particularly focusing on sleep, vitals, and activity metrics derived from Apple HealthKit data.
 """
 
 import pandas as pd
@@ -10,6 +9,7 @@ from typing import List, Tuple, Literal
 import pingouin as pg
 import warnings
 
+# occasionally have issues with circular imports
 try:
     from circadian_model import CircadianModel
     from data_cleaning import combineOverlaps
@@ -422,9 +422,9 @@ def dailySleepFeatures(hk_data: pd.DataFrame, qc: bool = True) -> pd.DataFrame:
         )
 
         # Set 0 sleep efficiency to NaN
-        sleep_agg.loc[
-            sleep_agg.sleepEfficiency == 0, "sleepEfficiency"
-        ] = np.nan
+        sleep_agg.loc[sleep_agg.sleepEfficiency == 0, "sleepEfficiency"] = (
+            np.nan
+        )
 
         # No sleep efficiency > 1
         sleep_agg.loc[sleep_agg["sleepEfficiency"] > 1, "sleepEfficiency"] = 1

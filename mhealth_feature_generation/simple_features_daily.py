@@ -1,9 +1,8 @@
 """ Wrapper functions for simple feature generation from Apple HealthKit data at the daily level
 Features are calculated on a daily basis with user_id and date as the primary keys
 Features are in format "domain_metric_time" for example "watchOnHours_sum_day"
-Time can be "day" or in quarter days with values "h0", "h6", "h12", "h18". Time will also refer to contexts such as "sleep", "resting" etc.
-
 """
+
 import pandas as pd
 import numpy as np
 from typing import List, Literal, Tuple
@@ -17,6 +16,14 @@ from .simple_features import (
 
 
 def collectAllDailyFeatures(data: pd.DataFrame) -> pd.DataFrame:
+    """Wrapper function to generate a set of common daily features from Apple HealthKit data
+
+    Args:
+        data (pd.DataFrame): HealthKit data from DataLoader
+
+    Returns:
+        pd.DataFrame: Daily features with user_id and date as primary keys
+    """
     watch_on_hours = getWatchOnHoursDaily(data)
     hr_features = aggregateVitalsDaily(
         data,
@@ -184,39 +191,6 @@ def aggregateVitalsDaily(
     vital_daily["date"] = vital_daily["local_start"].dt.date
     vital_daily.drop(columns=["level_2", "local_start"], inplace=True)
     return vital_daily
-    """
-    # Calculate metrics for every 6 hours - TODO: implement as using simple_features functions
-    if quarter_day:
-        vital_q = (
-            resamp_vital.groupby("user_id")
-            .resample("6h", on="local_start", origin="start_day")
-            .aggregate({"count": "sum", "median": aggregations})
-        )
-        vital_q.columns = [f"{vital_type}_" + c[1] for c in vital_q.columns]
-        vital_q = vital_q.rename(columns={f"{vital_type}_sum": f"{vital_type}_count"})
-        vital_q = vital_q.reset_index()
-        vital_q["date"] = vital_q.local_start.dt.date
-        vital_q["hour"] = vital_q.local_start.dt.hour
-        hrq_piv = vital_q.pivot_table(index=["date", "user_id"], columns=["hour"])
-        hrq_piv.columns = [f"{c[0]}_h{c[1]}" for c in hrq_piv.columns]
-        hrq_piv = hrq_piv[[c for c in hrq_piv.columns if "local_start" not in c]]
-
-        # Fill nan count values with 0
-        count_cols = [c for c in hrq_piv.columns if "count" in c]
-        hrq_piv[count_cols] = hrq_piv[count_cols].fillna(0)
-
-        # Merge with Daily Feature
-        vital_features = (
-            vital_daily.reset_index()
-            .merge(hrq_piv, on=["date", "user_id"])
-            .drop(columns=["local_start", "index"])
-        )
-    else:
-        vital_features = vital_daily.reset_index().drop(
-            columns=["local_start", "index"]
-        )
-    return vital_features
-    """
 
 
 def aggregateSleepCategoriesDaily(hk_data: pd.DataFrame) -> pd.DataFrame:

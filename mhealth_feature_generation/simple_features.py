@@ -605,7 +605,7 @@ def aggregateAudioExposure(
 def aggregateDailySleep(
     hk_data: pd.DataFrame,
     sleep_daily: pd.DataFrame | None = None,
-    aggs: List = ["median", "min", "max", "std"],
+    aggs: List = ["mean", "median", "min", "max", "std"],
     sleep_features: None | List = None,
 ) -> pd.DataFrame:
     if sleep_daily is None:

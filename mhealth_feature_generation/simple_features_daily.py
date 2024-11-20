@@ -54,6 +54,7 @@ def collectAllDailyFeatures(data: pd.DataFrame) -> pd.DataFrame:
     active_energy_features = aggregateActiveDurationDaily(
         data, "ActiveEnergyBurned"
     )
+    step_count_features = aggregateActiveDurationDaily(data, "StepCount")
     if active_energy_features.empty:
         print("No Active Energy data")
 
@@ -80,6 +81,7 @@ def collectAllDailyFeatures(data: pd.DataFrame) -> pd.DataFrame:
         .merge(active_energy_features, on=["date", "user_id"], how="outer")
         .merge(sleep_annot_features, on=["date", "user_id"], how="outer")
         .merge(audioExposure_features, on=["date", "user_id"], how="outer")
+        .merge(step_count_features, on=["date", "user_id"], how="outer")
     )
     return hk_features
 

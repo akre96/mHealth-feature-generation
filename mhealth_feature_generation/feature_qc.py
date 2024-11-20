@@ -43,29 +43,31 @@ def healthKitQCFillNan(
     ] = np.nan
 
     # Fill in missing values for sleep
-    fill_in_sleep_index = qc_df[
-        ~qc_df.sleep_sleepDuration_day_median.isna()
-    ].index
-    sleep_cat_cols = [
-        "sleep_sleep_day_count",
-        "sleep_bedrest_day_count",
-        "sleep_Asleep_count",
-        "sleep_Asleep_mean",
-        "sleep_Asleep_sum",
-        "sleep_Awake_count",
-        "sleep_Awake_mean",
-        "sleep_Awake_sum",
-        "sleep_InBed_count",
-        "sleep_InBed_mean",
-        "sleep_InBed_sum",
-        "sleep_CategoryValueUnknown_count",
-        "sleep_CategoryValueUnknown_mean",
-        "sleep_CategoryValueUnknown_sum",
-    ]
-    qc_df[sleep_cat_cols] = qc_df[sleep_cat_cols].astype(float)
-    qc_df.loc[fill_in_sleep_index, sleep_cat_cols] = qc_df.loc[
-        fill_in_sleep_index, sleep_cat_cols
-    ].fillna(0.0)
+    if "sleep_sleepDuration_day_median" in qc_df.columns:
+        fill_in_sleep_index = qc_df[
+            ~qc_df.sleep_sleepDuration_day_median.isna()
+        ].index
+        sleep_cat_cols = [
+            "sleep_sleep_day_count",
+            "sleep_bedrest_day_count",
+            "sleep_Asleep_count",
+            "sleep_Asleep_mean",
+            "sleep_Asleep_sum",
+            "sleep_Awake_count",
+            "sleep_Awake_mean",
+            "sleep_Awake_sum",
+            "sleep_InBed_count",
+            "sleep_InBed_mean",
+            "sleep_InBed_sum",
+            "sleep_CategoryValueUnknown_count",
+            "sleep_CategoryValueUnknown_mean",
+            "sleep_CategoryValueUnknown_sum",
+        ]
+        sleep_cat_cols = [c for c in sleep_cat_cols if c in qc_df.columns]
+        qc_df[sleep_cat_cols] = qc_df[sleep_cat_cols].astype(float)
+        qc_df.loc[fill_in_sleep_index, sleep_cat_cols] = qc_df.loc[
+            fill_in_sleep_index, sleep_cat_cols
+        ].fillna(0.0)
 
     # Drop rows with missing values for main features
     if len(no_na_features) > 0:

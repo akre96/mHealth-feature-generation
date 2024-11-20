@@ -69,6 +69,7 @@ def generateHKFeatures(user_hk, user_id, timestamp, duration: durationType):
     sleep_cat_agg = aggregateSleepCategories(data)
     active_duration_aggregations = [
         "ActiveEnergyBurned",
+        "BasalEnergyBurned",
         "AppleExerciseTime",
         "StepCount",
     ]
@@ -100,6 +101,9 @@ def generateHKFeatures(user_hk, user_id, timestamp, duration: durationType):
 
     for vital, range in vital_aggregations:
         vital_data = data[data["type"] == vital].copy()
+        vital_data["value"] = pd.to_numeric(
+            vital_data["value"], errors="coerce"
+        )
         vital_data = (
             vital_data.loc[
                 vital_data["value"].between(range[0], range[1]),

@@ -31,3 +31,6 @@ include = ["mhealth_feature_generation"]
 
 [tool.black]
 line-length = 79
+
+[[tool.setuptools]
+packages = ["mhealth_feature_generation"]

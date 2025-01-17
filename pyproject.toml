@@ -1,31 +1,33 @@
-[tool.poetry]
+[project]
 name = "mhealth-feature-generation"
 version = "0.1.2"
 description = "Create features from Apple HealthKit data for a duration prior to a given timestamp"
-authors = ["Samir Akre <sakre@g.ucla.edu>"]
+authors = [{ name = "Samir Akre", email = "sakre@g.ucla.edu" }]
+requires-python = ">=3.10"
 readme = "README.md"
-packages = [{include = "mhealth_feature_generation"}]
+dependencies = [
+    "tqdm>=4.65.0,<5",
+    "pingouin>=0.5.3,<0.6",
+    "openpyxl>=3.1.2,<4",
+    "pandas>=2.1.1,<3",
+    "p-tqdm>=1.4.0,<2",
+    "typer>=0.12.3,<0.13",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.10"
-tqdm = "^4.65.0"
-pingouin = "^0.5.3"
-openpyxl = "^3.1.2"
-pandas = "^2.1.1"
-p-tqdm = "^1.4.0"
-typer = "^0.12.3"
+[dependency-groups]
+dev = [
+    "jupyter>=1.0.0,<2",
+    "black>=23.3.0,<24",
+    "seaborn>=0.12.2,<0.13",
+    "matplotlib>=3.7.1,<4",
+    "pytest>=7.4.0,<8",
+]
 
+[tool.hatch.build.targets.sdist]
+include = ["mhealth_feature_generation"]
 
-[tool.poetry.group.dev.dependencies]
-jupyter = "^1.0.0"
-black = "^23.3.0"
-seaborn = "^0.12.2"
-matplotlib = "^3.7.1"
-pytest = "^7.4.0"
+[tool.hatch.build.targets.wheel]
+include = ["mhealth_feature_generation"]
 
 [tool.black]
 line-length = 79
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
